@@ -1,12 +1,13 @@
-import React, { useState, useMemo, useEffect } from 'react';
-import { Volume2, Eye, EyeOff, CheckCircle2, RotateCcw, Layers, List, ArrowRight } from 'lucide-react';
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
+import { Volume2, Eye, EyeOff, CheckCircle2, RotateCcw, Layers, List, ArrowRight, Zap, Keyboard, MousePointerClick } from 'lucide-react';
 import { VOCAB_CATEGORIES, VOCAB_DATA } from '../../data/vocabData';
 import { speakJapanese } from '../../utils/tts';
+import { playCorrectSfx, playWrongSfx } from '../../utils/sfx';
 import SchoolMascot from '../SchoolMascot';
 
 export default function SchoolVocabView({ studyState, onUpdateVocab }) {
   const [selectedCategory, setSelectedCategory] = useState('step1');
-  const [viewMode, setViewMode] = useState('card');
+  const [viewMode, setViewMode] = useState('card'); // 'card' | 'quiz' | 'list'
   const [filterUnmastered, setFilterUnmastered] = useState(false);
 
   const [cardIndex, setCardIndex] = useState(0);
@@ -14,6 +15,19 @@ export default function SchoolVocabView({ studyState, onUpdateVocab }) {
 
   const [hideAnswerInList, setHideAnswerInList] = useState(false);
   const [revealedIds, setRevealedIds] = useState({});
+
+  // 단어 퀴즈 상태 (4지선다 + 주관식 타이핑)
+  const [quizAnswerType, setQuizAnswerType] = useState('choice'); // 'choice' | 'typing'
+  const [quizQ, setQuizQ] = useState(null);
+  const [selectedIdx, setSelectedIdx] = useState(null);
+  const [typingInput, setTypingInput] = useState('');
+  const [typingFlash, setTypingFlash] = useState(false);
+  const [isFeedback, setIsFeedback] = useState(false);
+  const [lastWrong, setLastWrong] = useState(false);
+  const [streak, setStreak] = useState(0);
+
+  const typingRef = useRef(null);
+  const sfxEnabled = studyState.settings.soundFx !== false;
 
   const categoryWords = useMemo(() => {
     const base = VOCAB_DATA.filter(v => v.category === selectedCategory);
@@ -39,9 +53,103 @@ export default function SchoolVocabView({ studyState, onUpdateVocab }) {
 
   const handleRateCard = (status) => {
     if (!currentWord) return;
+    if (status === 'mastered') {
+      playCorrectSfx(sfxEnabled, 2);
+    }
     onUpdateVocab(currentWord.id, status);
     setIsRevealed(false);
     setCardIndex(prev => (prev + 1) % categoryWords.length);
+  };
+
+  // 단어 퀴즈 생성
+  const generateVocabQuiz = useCallback((prevId = null) => {
+    if (!categoryWords.length) return;
+    const candidates = categoryWords.length > 1
+      ? categoryWords.filter(w => w.id !== prevId)
+      : categoryWords;
+    const target = candidates[Math.floor(Math.random() * candidates.length)];
+
+    const distractorPool = VOCAB_DATA.filter(w => w.id !== target.id);
+    const distractors = distractorPool.sort(() => Math.random() - 0.5).slice(0, 3);
+    const options = [target, ...distractors].sort(() => Math.random() - 0.5);
+    const correctIndex = options.findIndex(o => o.id === target.id);
+
+    setQuizQ({ target, options, correctIndex });
+    setSelectedIdx(null);
+    setTypingInput('');
+    setTypingFlash(false);
+    setIsFeedback(false);
+    setLastWrong(false);
+
+    setTimeout(() => {
+      if (typingRef.current) typingRef.current.focus();
+    }, 30);
+  }, [categoryWords]);
+
+  useEffect(() => {
+    if (viewMode === 'quiz') {
+      generateVocabQuiz(null);
+    }
+  }, [viewMode, selectedCategory, quizAnswerType, generateVocabQuiz]);
+
+  const handleSelectQuizOption = (idx) => {
+    if (!quizQ || isFeedback) return;
+    setSelectedIdx(idx);
+    setIsFeedback(true);
+
+    const isCorrect = idx === quizQ.correctIndex;
+    const nextStreak = isCorrect ? streak + 1 : 0;
+    setStreak(nextStreak);
+
+    if (isCorrect) {
+      playCorrectSfx(sfxEnabled, nextStreak);
+      onUpdateVocab(quizQ.target.id, 'mastered');
+      speakJapanese(quizQ.target.kana, studyState.settings.slowAudio);
+      setTimeout(() => {
+        generateVocabQuiz(quizQ.target.id);
+      }, 240);
+    } else {
+      playWrongSfx(sfxEnabled);
+      speakJapanese(quizQ.target.kana, studyState.settings.slowAudio);
+      setLastWrong(true);
+    }
+  };
+
+  const handleTypingQuizSubmit = (e) => {
+    e.preventDefault();
+    if (!quizQ) return;
+    if (lastWrong) {
+      generateVocabQuiz(quizQ.target.id);
+      return;
+    }
+    if (isFeedback || !typingInput.trim()) return;
+
+    const clean = typingInput.trim().replace(/[-~\s]/g, '');
+    const t = quizQ.target;
+    const accepted = [
+      t.kr.replace(/[-~\s]/g, ''),
+      ...t.meaning.split(/[,/]/).map(s => s.trim().replace(/\s/g, '')),
+      t.kana
+    ];
+
+    const isCorrect = accepted.some(a => a && (clean === a || typingInput.trim() === a));
+    setIsFeedback(true);
+    const nextStreak = isCorrect ? streak + 1 : 0;
+    setStreak(nextStreak);
+
+    speakJapanese(t.kana, studyState.settings.slowAudio);
+
+    if (isCorrect) {
+      playCorrectSfx(sfxEnabled, nextStreak);
+      setTypingFlash(true);
+      onUpdateVocab(t.id, 'mastered');
+      setTimeout(() => {
+        generateVocabQuiz(t.id);
+      }, 260);
+    } else {
+      playWrongSfx(sfxEnabled);
+      setLastWrong(true);
+    }
   };
 
   useEffect(() => {
@@ -122,7 +230,7 @@ export default function SchoolVocabView({ studyState, onUpdateVocab }) {
         className="rounded-2xl p-4 bg-white flex flex-wrap items-center justify-between gap-3"
         style={{ border: '2px solid #BAE6FD', boxShadow: '0 4px 0 #BAE6FD' }}
       >
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={() => setViewMode('card')}
             className="px-4 py-1.5 rounded-lg text-xs font-black flex items-center gap-1.5 cursor-pointer transition skew-badge"
@@ -133,7 +241,19 @@ export default function SchoolVocabView({ studyState, onUpdateVocab }) {
             }
           >
             <Layers className="w-3.5 h-3.5" />
-            <span>플래시 트레이닝</span>
+            <span>1. 플래시 카드</span>
+          </button>
+          <button
+            onClick={() => setViewMode('quiz')}
+            className="px-4 py-1.5 rounded-lg text-xs font-black flex items-center gap-1.5 cursor-pointer transition skew-badge"
+            style={
+              viewMode === 'quiz'
+                ? { backgroundColor: '#F43F5E', color: '#FFFFFF' }
+                : { backgroundColor: '#FFE4E6', color: '#BE123C', border: '1.5px solid #FDA4AF' }
+            }
+          >
+            <Zap className="w-3.5 h-3.5" />
+            <span>2. ⚡ 단어 배틀 (객관식+타이핑)</span>
           </button>
           <button
             onClick={() => setViewMode('list')}
@@ -145,7 +265,7 @@ export default function SchoolVocabView({ studyState, onUpdateVocab }) {
             }
           >
             <List className="w-3.5 h-3.5" />
-            <span>전체 단어 데이터</span>
+            <span>3. 전체 단어 데이터</span>
           </button>
         </div>
 
@@ -183,7 +303,7 @@ export default function SchoolVocabView({ studyState, onUpdateVocab }) {
         </div>
       </div>
 
-      {/* 플래시카드 모드 */}
+      {/* 1. 플래시카드 모드 */}
       {viewMode === 'card' && currentWord && (
         <div className="max-w-2xl mx-auto">
           <div
@@ -268,7 +388,153 @@ export default function SchoolVocabView({ studyState, onUpdateVocab }) {
         </div>
       )}
 
-      {/* 리스트 모드 */}
+      {/* 2. 단어 배틀 (4지선다 + 주관식 타이핑) */}
+      {viewMode === 'quiz' && quizQ && (
+        <div className="max-w-2xl mx-auto">
+          <div
+            className="rounded-3xl p-6 sm:p-8 bg-white text-center space-y-5"
+            style={{ border: '2.5px solid #38BDF8', boxShadow: '0 6px 0 #38BDF8' }}
+          >
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={() => setQuizAnswerType('choice')}
+                  className="px-3.5 py-1.5 rounded-lg text-xs font-black flex items-center gap-1 cursor-pointer skew-badge"
+                  style={
+                    quizAnswerType === 'choice'
+                      ? { backgroundColor: '#0284C7', color: '#FFFFFF' }
+                      : { backgroundColor: '#F0F9FF', color: '#0369A1', border: '1.5px solid #BAE6FD' }
+                  }
+                >
+                  <MousePointerClick className="w-3.5 h-3.5" />
+                  <span>🔢 4지선다</span>
+                </button>
+                <button
+                  onClick={() => setQuizAnswerType('typing')}
+                  className="px-3.5 py-1.5 rounded-lg text-xs font-black flex items-center gap-1 cursor-pointer skew-badge"
+                  style={
+                    quizAnswerType === 'typing'
+                      ? { backgroundColor: '#F43F5E', color: '#FFFFFF' }
+                      : { backgroundColor: '#FFE4E6', color: '#BE123C', border: '1.5px solid #FDA4AF' }
+                  }
+                >
+                  <Keyboard className="w-3.5 h-3.5" />
+                  <span>⌨️ 주관식 직접 타이핑</span>
+                </button>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <span className="px-3 py-1 rounded-md text-xs font-black text-white skew-badge" style={{ backgroundColor: '#F43F5E' }}>
+                  <span>⚡ {streak} COMBO!</span>
+                </span>
+                <button
+                  onClick={() => speakJapanese(quizQ.target.kana, studyState.settings.slowAudio)}
+                  className="px-3 py-1.5 rounded-lg text-xs font-black flex items-center gap-1 cursor-pointer skew-badge"
+                  style={{ backgroundColor: '#E0F2FE', color: '#0284C7' }}
+                >
+                  <Volume2 className="w-3.5 h-3.5" /> <span>VOICE</span>
+                </button>
+              </div>
+            </div>
+
+            <div
+              className="rounded-2xl py-8 px-4"
+              style={{ background: 'linear-gradient(180deg, #F0F9FF 0%, #E0F2FE 100%)', border: '2px solid #BAE6FD' }}
+            >
+              <div className="text-5xl sm:text-6xl font-black text-slate-900">
+                {quizQ.target.kana}
+              </div>
+              <p className="text-xs font-black mt-3" style={{ color: '#0284C7' }}>
+                {quizAnswerType === 'typing'
+                  ? '한국어 발음(예: 네코) 또는 한국어 뜻(예: 고양이)을 직접 타이핑하세요!'
+                  : '이 단어의 올바른 발음과 뜻을 고르세요!'}
+              </p>
+            </div>
+
+            {quizAnswerType === 'choice' ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {quizQ.options.map((opt, idx) => {
+                  let st = {
+                    backgroundColor: '#F8FAFC',
+                    border: '2px solid #CBD5E1',
+                    borderBottom: '4px solid #94A3B8',
+                    color: '#0F172A'
+                  };
+                  if (isFeedback) {
+                    if (idx === quizQ.correctIndex) {
+                      st = { backgroundColor: '#0284C7', border: '2px solid #0369A1', color: '#FFFFFF' };
+                    } else if (idx === selectedIdx) {
+                      st = { backgroundColor: '#F43F5E', border: '2px solid #E11D48', color: '#FFFFFF' };
+                    }
+                  }
+                  return (
+                    <button
+                      key={opt.id}
+                      onClick={() => handleSelectQuizOption(idx)}
+                      disabled={isFeedback}
+                      className="p-4 rounded-2xl font-black text-left cursor-pointer transition flex items-center justify-between"
+                      style={st}
+                    >
+                      <div>
+                        <div className="text-base">[{opt.kr}]</div>
+                        <div className="text-sm opacity-90">{opt.meaning}</div>
+                      </div>
+                      <span className="text-xs font-black opacity-60">0{idx + 1}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <form onSubmit={handleTypingQuizSubmit} className="max-w-md mx-auto space-y-2">
+                <div className="flex items-center gap-2">
+                  <input
+                    ref={typingRef}
+                    type="text"
+                    value={typingInput}
+                    onChange={(e) => setTypingInput(e.target.value)}
+                    placeholder={`발음(예: ${quizQ.target.kr}) 또는 뜻 입력`}
+                    className="flex-1 px-4 py-3 rounded-2xl text-center text-lg font-black outline-none"
+                    style={
+                      typingFlash
+                        ? { backgroundColor: '#DCFCE7', color: '#166534', border: '2.5px solid #22C55E' }
+                        : lastWrong
+                        ? { backgroundColor: '#FFE4E6', color: '#BE123C', border: '2.5px solid #F43F5E' }
+                        : { backgroundColor: '#F8FAFC', color: '#0F172A', border: '2.5px solid #38BDF8' }
+                    }
+                  />
+                  <button
+                    type="submit"
+                    className="px-5 py-3 rounded-2xl font-black text-sm text-white cursor-pointer shrink-0 skew-badge"
+                    style={{ backgroundColor: '#0284C7' }}
+                  >
+                    <span>{lastWrong ? 'NEXT ↵' : 'ENTER ↵'}</span>
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {lastWrong && (
+              <div
+                className="p-4 rounded-2xl text-left flex items-center justify-between gap-3 animate-fadeIn"
+                style={{ backgroundColor: '#FFF1F2', border: '2px solid #FDA4AF', color: '#9F1239' }}
+              >
+                <div className="text-xs sm:text-sm font-black">
+                  정답: {quizQ.target.kana} [{quizQ.target.kr}] = “{quizQ.target.meaning}” ({quizQ.target.tip})
+                </div>
+                <button
+                  onClick={() => generateVocabQuiz(quizQ.target.id)}
+                  className="px-4 py-2 rounded-xl text-xs font-black text-white cursor-pointer shrink-0"
+                  style={{ backgroundColor: '#F43F5E' }}
+                >
+                  다음 →
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* 3. 리스트 모드 */}
       {viewMode === 'list' && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {categoryWords.map(item => {

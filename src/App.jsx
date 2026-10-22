@@ -216,11 +216,15 @@ export default function App() {
 
   const renderSyncModal = () => {
     if (!showSyncModal) return null;
+    const isSchool = currentTheme === 'school';
     return (
       <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
-        <div className="ghibli-paper rounded-3xl p-6 max-w-md w-full space-y-4 animate-fadeIn">
+        <div
+          className={`rounded-3xl p-6 max-w-md w-full space-y-4 animate-fadeIn ${isSchool ? 'bg-white' : 'ghibli-paper'}`}
+          style={isSchool ? { border: '2.5px solid #38BDF8', boxShadow: '0 6px 0 #38BDF8' } : {}}
+        >
           <div className="flex items-center justify-between">
-            <h3 className="font-black text-base flex items-center gap-2" style={{ color: '#2D4A3E' }}>
+            <h3 className="font-black text-base flex items-center gap-2" style={{ color: isSchool ? '#0369A1' : '#2D4A3E' }}>
               📦 PC ↔ 스마트폰 학습 기록 옮기기
             </h3>
             <button
@@ -231,24 +235,32 @@ export default function App() {
             </button>
           </div>
 
-          <p className="text-xs font-bold leading-relaxed" style={{ color: '#5C4E41' }}>
-            별도 회원가입 없이, 아래 <strong>내 기록 코드</strong>를 복사해 카카오톡 나에게 보내기 등으로 다른 기기에 붙여넣으면 도토리·단어·오답 기록이 그대로 이어집니다!
+          <p className="text-xs font-bold leading-relaxed" style={{ color: isSchool ? '#475569' : '#5C4E41' }}>
+            별도 회원가입 없이, 아래 <strong>내 기록 코드</strong>를 복사해 카카오톡 나에게 보내기 등으로 다른 기기에 붙여넣으면 진도·단어·오답 기록이 그대로 이어집니다!
           </p>
 
           <div className="space-y-1.5">
-            <label className="text-xs font-black" style={{ color: '#2D4A3E' }}>1. 현재 기기의 기록 코드 복사하기</label>
+            <label className="text-xs font-black" style={{ color: isSchool ? '#0369A1' : '#2D4A3E' }}>1. 현재 기기의 기록 코드 복사하기</label>
             <div className="flex items-center gap-2">
               <input
                 type="text"
                 readOnly
                 value={exportCodeString}
                 className="flex-1 px-3 py-2 rounded-xl text-xs font-mono outline-none"
-                style={{ backgroundColor: '#FAF6EE', border: '1.5px solid #C7B69E', color: '#5C4E41' }}
+                style={
+                  isSchool
+                    ? { backgroundColor: '#F0F9FF', border: '1.5px solid #BAE6FD', color: '#0F172A' }
+                    : { backgroundColor: '#FAF6EE', border: '1.5px solid #C7B69E', color: '#5C4E41' }
+                }
               />
               <button
                 onClick={handleCopyExportCode}
                 className="px-3.5 py-2 rounded-xl text-xs font-black flex items-center gap-1 cursor-pointer shrink-0"
-                style={{ backgroundColor: '#2D4A3E', color: '#FEFCE8' }}
+                style={
+                  isSchool
+                    ? { backgroundColor: '#0284C7', color: '#FFFFFF' }
+                    : { backgroundColor: '#2D4A3E', color: '#FEFCE8' }
+                }
               >
                 {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
                 {copied ? '복사됨!' : '코드 복사'}
@@ -256,8 +268,8 @@ export default function App() {
             </div>
           </div>
 
-          <div className="space-y-1.5 pt-2" style={{ borderTop: '1.5px dashed #D5C7B2' }}>
-            <label className="text-xs font-black" style={{ color: '#B45309' }}>2. 다른 기기에서 복사한 코드 붙여넣기</label>
+          <div className="space-y-1.5 pt-2" style={{ borderTop: isSchool ? '1.5px solid #E0F2FE' : '1.5px dashed #D5C7B2' }}>
+            <label className="text-xs font-black" style={{ color: isSchool ? '#F43F5E' : '#B45309' }}>2. 다른 기기에서 복사한 코드 붙여넣기</label>
             <div className="flex items-center gap-2">
               <input
                 type="text"
@@ -265,12 +277,20 @@ export default function App() {
                 onChange={(e) => setImportCode(e.target.value)}
                 placeholder="여기에 코드를 붙여넣으세요"
                 className="flex-1 px-3 py-2 rounded-xl text-xs font-mono outline-none"
-                style={{ backgroundColor: '#FFFFFF', border: '1.5px solid #D97706', color: '#2D4A3E' }}
+                style={
+                  isSchool
+                    ? { backgroundColor: '#FFFFFF', border: '1.5px solid #38BDF8', color: '#0F172A' }
+                    : { backgroundColor: '#FFFFFF', border: '1.5px solid #D97706', color: '#2D4A3E' }
+                }
               />
               <button
                 onClick={handleImportCode}
                 className="px-3.5 py-2 rounded-xl text-xs font-black cursor-pointer shrink-0"
-                style={{ backgroundColor: '#F59E0B', color: '#FFFFFF' }}
+                style={
+                  isSchool
+                    ? { backgroundColor: '#F43F5E', color: '#FFFFFF' }
+                    : { backgroundColor: '#F59E0B', color: '#FFFFFF' }
+                }
               >
                 불러오기
               </button>
@@ -509,6 +529,19 @@ export default function App() {
             )}
 
             <button
+              onClick={handleToggleSoundFx}
+              className="px-3 py-1.5 rounded-lg text-xs font-black flex items-center gap-1 transition cursor-pointer skew-badge"
+              style={
+                sfxEnabled
+                  ? { backgroundColor: '#DCFCE7', color: '#166534', border: '1.5px solid #4ADE80' }
+                  : { backgroundColor: '#F1F5F9', color: '#64748B', border: '1.5px solid #CBD5E1' }
+              }
+              title="정답/오답 차임벨 효과음 켜기/끄기"
+            >
+              <span>{sfxEnabled ? '🔔 SFX ON' : '🔕 SFX OFF'}</span>
+            </button>
+
+            <button
               onClick={handleToggleSlowAudio}
               className="px-3 py-1.5 rounded-lg text-xs font-black flex items-center gap-1 transition cursor-pointer skew-badge"
               style={
@@ -579,6 +612,13 @@ export default function App() {
           })}
         </div>
       </header>
+
+      {/* 날짜 없는 7관문 맞춤 코스 네비게이션 바 */}
+      <CurriculumBar
+        studyState={studyState}
+        onNavigateTab={(tabId) => setActiveTab(tabId)}
+        onStartCustomQuiz={handleStartRowQuiz}
+      />
 
       <main className="flex-1 max-w-6xl w-full mx-auto px-4 py-6">
         {activeTab === 'table' && (

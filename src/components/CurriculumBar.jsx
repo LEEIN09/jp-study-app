@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Compass, ArrowRight, CheckCircle2, ChevronDown, ChevronUp, Sparkles } from 'lucide-react';
+import { Compass, ArrowRight, ChevronDown, ChevronUp } from 'lucide-react';
 import { KANA_DATA } from '../data/kanaData';
 import { VOCAB_DATA } from '../data/vocabData';
 
@@ -9,6 +9,7 @@ export default function CurriculumBar({
   onStartCustomQuiz
 }) {
   const [expanded, setExpanded] = useState(false);
+  const isSchool = studyState.settings.theme === 'school';
 
   // 7단계 관문(체크포인트) 달성도 계산 (날짜 개념 없이 내 페이스대로!)
   const checkpoints = useMemo(() => {
@@ -108,7 +109,7 @@ export default function CurriculumBar({
       },
       {
         step: 7,
-        title: '관문 7. 만능 패턴 & 냐옹 점원 상황극',
+        title: isSchool ? '관문 7. 만능 패턴 & 유이 선배 상황극' : '관문 7. 만능 패턴 & 냐옹 점원 상황극',
         desc: '배운 단어를 문장에 끼워 넣고 마이크로 직접 주문해 보기!',
         progressText: '실전 회화',
         cleared: false,
@@ -117,14 +118,14 @@ export default function CurriculumBar({
         onPassQuiz: null
       }
     ];
-  }, [studyState.kanaStats, studyState.vocabStatus, onNavigateTab, onStartCustomQuiz]);
+  }, [studyState.kanaStats, studyState.vocabStatus, onNavigateTab, onStartCustomQuiz, isSchool]);
 
   // 현재 사용자 상태에 맞는 '지금 할 일 1순위' 자동 계산
   const nextRecommendation = useMemo(() => {
     const weakList = KANA_DATA.filter(k => (studyState.kanaStats[k.id]?.wrong || 0) > 0);
     if (weakList.length >= 3) {
       return {
-        badge: '🐾 약점 복습 1순위',
+        badge: isSchool ? '⚡ 약점 타겟 1순위' : '🐾 약점 복습 1순위',
         text: `헷갈렸던 글자 ${weakList.length}개가 남아있어요! 1분만 투자해서 먼저 격파해 볼까요?`,
         buttonText: '헷갈린 글자 복습 퀴즈',
         onClick: () => onStartCustomQuiz(weakList.map(k => k.id), `헷갈린 글자 (${weakList.length}개)`)
@@ -138,7 +139,7 @@ export default function CurriculumBar({
       buttonText: firstUnfinished.actionLabel,
       onClick: firstUnfinished.onGo
     };
-  }, [studyState.kanaStats, checkpoints, onStartCustomQuiz]);
+  }, [studyState.kanaStats, checkpoints, onStartCustomQuiz, isSchool]);
 
   const clearedCount = checkpoints.filter(c => c.cleared).length;
 
@@ -146,19 +147,30 @@ export default function CurriculumBar({
     <div className="max-w-6xl mx-auto px-4 pt-4">
       <div
         className="rounded-2xl p-3.5 sm:p-4 transition-all"
-        style={{ backgroundColor: '#FFFDF8', border: '2px solid #D5C7B2', boxShadow: '0 3px 0 #DFD3C0' }}
+        style={
+          isSchool
+            ? { backgroundColor: '#FFFFFF', border: '2px solid #7DD3FC', boxShadow: '0 4px 0 #BAE6FD' }
+            : { backgroundColor: '#FFFDF8', border: '2px solid #D5C7B2', boxShadow: '0 3px 0 #DFD3C0' }
+        }
       >
         {/* 상단 1줄: 지금 할 일 1순위 자동 브리핑 */}
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2.5 flex-wrap">
             <span
-              className="text-xs font-black px-2.5 py-1 rounded-full flex items-center gap-1"
-              style={{ backgroundColor: '#ECFCCB', color: '#365314', border: '1.5px solid #84CC16' }}
+              className={`text-xs font-black px-2.5 py-1 flex items-center gap-1 ${isSchool ? 'rounded-md skew-badge' : 'rounded-full'}`}
+              style={
+                isSchool
+                  ? { background: 'linear-gradient(90deg, #0284C7, #38BDF8)', color: '#FFFFFF' }
+                  : { backgroundColor: '#ECFCCB', color: '#365314', border: '1.5px solid #84CC16' }
+              }
             >
               <Compass className="w-3.5 h-3.5" />
-              {nextRecommendation.badge}
+              <span>{nextRecommendation.badge}</span>
             </span>
-            <span className="text-xs sm:text-sm font-extrabold" style={{ color: '#2D4A3E' }}>
+            <span
+              className="text-xs sm:text-sm font-extrabold"
+              style={{ color: isSchool ? '#0F172A' : '#2D4A3E' }}
+            >
               {nextRecommendation.text}
             </span>
           </div>
@@ -166,16 +178,24 @@ export default function CurriculumBar({
           <div className="flex items-center gap-2 ml-auto">
             <button
               onClick={nextRecommendation.onClick}
-              className="px-3.5 py-1.5 rounded-full text-xs font-black flex items-center gap-1 cursor-pointer transition"
-              style={{ backgroundColor: '#F59E0B', color: '#FFFFFF', border: '1.5px solid #D97706' }}
+              className={`px-3.5 py-1.5 text-xs font-black flex items-center gap-1 cursor-pointer transition ${isSchool ? 'rounded-lg skew-badge' : 'rounded-full'}`}
+              style={
+                isSchool
+                  ? { backgroundColor: '#F43F5E', color: '#FFFFFF', boxShadow: '0 2px 0 #BE123C' }
+                  : { backgroundColor: '#F59E0B', color: '#FFFFFF', border: '1.5px solid #D97706' }
+              }
             >
-              {nextRecommendation.buttonText} <ArrowRight className="w-3.5 h-3.5" />
+              <span>{nextRecommendation.buttonText}</span> <ArrowRight className="w-3.5 h-3.5" />
             </button>
 
             <button
               onClick={() => setExpanded(!expanded)}
-              className="px-3 py-1.5 rounded-full text-xs font-extrabold flex items-center gap-1 cursor-pointer transition"
-              style={{ backgroundColor: '#FAF6EE', color: '#5C4E41', border: '1.5px solid #C7B69E' }}
+              className={`px-3 py-1.5 text-xs font-extrabold flex items-center gap-1 cursor-pointer transition ${isSchool ? 'rounded-lg skew-badge' : 'rounded-full'}`}
+              style={
+                isSchool
+                  ? { backgroundColor: '#F0F9FF', color: '#0369A1', border: '1.5px solid #BAE6FD' }
+                  : { backgroundColor: '#FAF6EE', color: '#5C4E41', border: '1.5px solid #C7B69E' }
+              }
             >
               <span>전체 7관문 지도 ({clearedCount}/7)</span>
               {expanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
@@ -185,12 +205,20 @@ export default function CurriculumBar({
 
         {/* 펼쳤을 때: 날짜 부담 없는 7단계 체크포인트 코스 지도 */}
         {expanded && (
-          <div className="mt-4 pt-4 space-y-3 animate-fadeIn" style={{ borderTop: '1.5px dashed #D5C7B2' }}>
-            <div className="flex items-center justify-between flex-wrap gap-2 text-xs font-bold" style={{ color: '#7D6E5D' }}>
+          <div
+            className="mt-4 pt-4 space-y-3 animate-fadeIn"
+            style={{ borderTop: isSchool ? '1.5px solid #E0F2FE' : '1.5px dashed #D5C7B2' }}
+          >
+            <div
+              className="flex items-center justify-between flex-wrap gap-2 text-xs font-bold"
+              style={{ color: isSchool ? '#475569' : '#7D6E5D' }}
+            >
               <span>
-                🌱 <strong>‘1일차·2일차’ 날짜 제한이 없습니다!</strong> 하루에 3관문을 깨든, 일주일에 1관문을 깨든 내 속도에 맞춰 진행하세요.
+                {isSchool ? '⚡' : '🌱'} <strong>‘1일차·2일차’ 날짜 제한이 없습니다!</strong> 하루에 3관문을 깨든, 일주일에 1관문을 깨든 내 속도에 맞춰 진행하세요.
               </span>
-              <span style={{ color: '#B45309' }}>이미 아는 단계는 [시험 보고 패스]로 건너뛸 수 있어요!</span>
+              <span style={{ color: isSchool ? '#0284C7' : '#B45309' }}>
+                이미 아는 단계는 [⚡패스시험]으로 바로 건너뛸 수 있어요!
+              </span>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
@@ -200,21 +228,33 @@ export default function CurriculumBar({
                   className="p-3.5 rounded-2xl flex flex-col justify-between gap-2.5"
                   style={
                     cp.cleared
-                      ? { backgroundColor: '#F0FDF4', border: '2px solid #86EFAC' }
+                      ? isSchool
+                        ? { backgroundColor: '#F0F9FF', border: '2px solid #38BDF8' }
+                        : { backgroundColor: '#F0FDF4', border: '2px solid #86EFAC' }
+                      : isSchool
+                      ? { backgroundColor: '#F8FAFC', border: '1.5px solid #CBD5E1' }
                       : { backgroundColor: '#FAF6EE', border: '1.5px dashed #C7B69E' }
                   }
                 >
                   <div>
                     <div className="flex items-center justify-between text-xs font-black">
-                      <span style={{ color: cp.cleared ? '#166534' : '#B45309' }}>
-                        {cp.cleared ? '💮 통과 완료' : `STEP 0${cp.step}`}
+                      <span
+                        style={{
+                          color: cp.cleared
+                            ? isSchool ? '#0284C7' : '#166534'
+                            : isSchool ? '#F43F5E' : '#B45309'
+                        }}
+                      >
+                        {cp.cleared ? (isSchool ? '★ CLEAR!' : '💮 통과 완료') : `STEP 0${cp.step}`}
                       </span>
-                      <span className="text-[11px] font-bold" style={{ color: '#7D6E5D' }}>{cp.progressText}</span>
+                      <span className="text-[11px] font-bold" style={{ color: isSchool ? '#64748B' : '#7D6E5D' }}>
+                        {cp.progressText}
+                      </span>
                     </div>
-                    <div className="font-black text-xs sm:text-sm mt-1" style={{ color: '#2D4A3E' }}>
+                    <div className="font-black text-xs sm:text-sm mt-1" style={{ color: isSchool ? '#0F172A' : '#2D4A3E' }}>
                       {cp.title}
                     </div>
-                    <p className="text-xs font-semibold mt-0.5 leading-snug" style={{ color: '#5C4E41' }}>
+                    <p className="text-xs font-semibold mt-0.5 leading-snug" style={{ color: isSchool ? '#475569' : '#5C4E41' }}>
                       {cp.desc}
                     </p>
                   </div>
@@ -226,7 +266,11 @@ export default function CurriculumBar({
                         setExpanded(false);
                       }}
                       className="flex-1 py-1.5 px-2.5 rounded-xl text-xs font-black cursor-pointer text-center"
-                      style={{ backgroundColor: '#2D4A3E', color: '#FEFCE8' }}
+                      style={
+                        isSchool
+                          ? { backgroundColor: '#0284C7', color: '#FFFFFF' }
+                          : { backgroundColor: '#2D4A3E', color: '#FEFCE8' }
+                      }
                     >
                       {cp.actionLabel}
                     </button>
@@ -237,7 +281,11 @@ export default function CurriculumBar({
                           setExpanded(false);
                         }}
                         className="py-1.5 px-2.5 rounded-xl text-xs font-extrabold cursor-pointer"
-                        style={{ backgroundColor: '#FEF3C7', color: '#92400E', border: '1px solid #F59E0B' }}
+                        style={
+                          isSchool
+                            ? { backgroundColor: '#FEF08A', color: '#854D0E', border: '1px solid #FACC15' }
+                            : { backgroundColor: '#FEF3C7', color: '#92400E', border: '1px solid #F59E0B' }
+                        }
                         title="이미 아는 내용이라면 바로 시험을 봐서 통과하세요"
                       >
                         ⚡패스시험

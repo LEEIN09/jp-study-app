@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Volume2, AlertCircle, Keyboard } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { Volume2, Keyboard, MousePointerClick } from 'lucide-react';
 import { KANA_DATA, CONFUSING_PAIRS } from '../../data/kanaData';
 import { speakJapanese } from '../../utils/tts';
+import { playCorrectSfx, playWrongSfx } from '../../utils/sfx';
 import SchoolMascot from '../SchoolMascot';
 
 const QUIZ_MODES = [
@@ -20,6 +21,7 @@ const SCOPES = [
 ];
 
 export default function SchoolSpeedQuizView({ studyState, onRecordResult, customScope, onClearCustomScope }) {
+  const [answerType, setAnswerType] = useState('choice'); // 'choice' | 'typing'
   const [quizMode, setQuizMode] = useState('hira-to-kr');
   const [scope, setScope] = useState(customScope ? 'custom' : 'first-half');
   const [streak, setStreak] = useState(0);
@@ -28,8 +30,13 @@ export default function SchoolSpeedQuizView({ studyState, onRecordResult, custom
 
   const [currentQ, setCurrentQ] = useState(null);
   const [selectedIdx, setSelectedIdx] = useState(null);
+  const [typingInput, setTypingInput] = useState('');
+  const [typingSuccessFlash, setTypingSuccessFlash] = useState(false);
   const [isFeedback, setIsFeedback] = useState(false);
   const [lastWasWrong, setLastWasWrong] = useState(false);
+
+  const typingInputRef = useRef(null);
+  const sfxEnabled = studyState.settings.soundFx !== false;
 
   useEffect(() => {
     if (customScope && customScope.ids?.length > 0) {
@@ -121,17 +128,25 @@ export default function SchoolSpeedQuizView({ studyState, onRecordResult, custom
 
     setCurrentQ({ target, options, correctIndex });
     setSelectedIdx(null);
+    setTypingInput('');
+    setTypingSuccessFlash(false);
     setIsFeedback(false);
     setLastWasWrong(false);
 
     if (quizMode === 'kr-to-kana' || studyState.settings.autoSpeak) {
       speakJapanese(target.hira, studyState.settings.slowAudio);
     }
+
+    setTimeout(() => {
+      if (typingInputRef.current) {
+        typingInputRef.current.focus();
+      }
+    }, 30);
   }, [activePool, quizMode, studyState.kanaStats, studyState.settings.autoSpeak, studyState.settings.slowAudio]);
 
   useEffect(() => {
     generateQuestion(null);
-  }, [scope, quizMode]);
+  }, [scope, quizMode, answerType]);
 
   const handleSelectOption = useCallback((idx) => {
     if (!currentQ || isFeedback) return;
@@ -146,6 +161,12 @@ export default function SchoolSpeedQuizView({ studyState, onRecordResult, custom
     setSessionSolved(s => s + 1);
     if (isCorrect) setSessionCorrect(c => c + 1);
 
+    if (isCorrect) {
+      playCorrectSfx(sfxEnabled, nextStreak);
+    } else {
+      playWrongSfx(sfxEnabled);
+    }
+
     onRecordResult(currentQ.target.id, isCorrect, nextStreak);
     speakJapanese(currentQ.target.hira, studyState.settings.slowAudio);
 
@@ -156,13 +177,70 @@ export default function SchoolSpeedQuizView({ studyState, onRecordResult, custom
     } else {
       setLastWasWrong(true);
     }
-  }, [currentQ, isFeedback, streak, onRecordResult, generateQuestion, studyState.settings.slowAudio]);
+  }, [currentQ, isFeedback, streak, sfxEnabled, onRecordResult, generateQuestion, studyState.settings.slowAudio]);
+
+  const handleTypingSubmit = (e) => {
+    e.preventDefault();
+    if (!currentQ) return;
+
+    if (lastWasWrong) {
+      generateQuestion(currentQ.target.id);
+      return;
+    }
+
+    if (isFeedback || !typingInput.trim()) return;
+
+    const clean = typingInput.trim().toLowerCase();
+    const t = currentQ.target;
+
+    const baseKr = t.kr.split('(')[0].trim();
+    const altKrMatch = t.kr.match(/\(([^)]+)\)/);
+    const altKrs = altKrMatch ? altKrMatch[1].split('/').map(s => s.trim()) : [];
+    const romajis = t.romaji.toLowerCase().split('/').map(s => s.trim());
+
+    const acceptedAnswers = new Set([
+      baseKr,
+      ...altKrs,
+      ...romajis,
+      t.hira,
+      t.kata
+    ]);
+
+    if (baseKr === '우') acceptedAnswers.add('으');
+    if (baseKr === '츠') { acceptedAnswers.add('쓰'); acceptedAnswers.add('쯔'); }
+    if (baseKr === '시') acceptedAnswers.add('쉬');
+    if (baseKr === '치') acceptedAnswers.add('찌');
+    if (baseKr === '후') acceptedAnswers.add('푸');
+    if (baseKr === '오(조사)') acceptedAnswers.add('오');
+
+    const isCorrect = acceptedAnswers.has(clean);
+    setIsFeedback(true);
+
+    const nextStreak = isCorrect ? streak + 1 : 0;
+    setStreak(nextStreak);
+    setSessionSolved(s => s + 1);
+    if (isCorrect) setSessionCorrect(c => c + 1);
+
+    onRecordResult(t.id, isCorrect, nextStreak);
+    speakJapanese(t.hira, studyState.settings.slowAudio);
+
+    if (isCorrect) {
+      playCorrectSfx(sfxEnabled, nextStreak);
+      setTypingSuccessFlash(true);
+      setTimeout(() => {
+        generateQuestion(t.id);
+      }, 250);
+    } else {
+      playWrongSfx(sfxEnabled);
+      setLastWasWrong(true);
+    }
+  };
 
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target?.tagName)) return;
 
-      if (['1', '2', '3', '4'].includes(e.key)) {
+      if (answerType === 'choice' && ['1', '2', '3', '4'].includes(e.key)) {
         e.preventDefault();
         const idx = parseInt(e.key, 10) - 1;
         if (!isFeedback) {
@@ -179,7 +257,7 @@ export default function SchoolSpeedQuizView({ studyState, onRecordResult, custom
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleSelectOption, isFeedback, lastWasWrong, currentQ, generateQuestion, studyState.settings.slowAudio]);
+  }, [answerType, handleSelectOption, isFeedback, lastWasWrong, currentQ, generateQuestion, studyState.settings.slowAudio]);
 
   const weakCount = useMemo(
     () => KANA_DATA.filter(k => (studyState.kanaStats[k.id]?.wrong || 0) > 0).length,
@@ -195,10 +273,12 @@ export default function SchoolSpeedQuizView({ studyState, onRecordResult, custom
     currentQ.target.kr.split('(')[0];
 
   const promptSub =
-    quizMode === 'hira-to-kr' ? 'TARGET HIRAGANA — 알맞은 발음을 선택하세요!' :
-    quizMode === 'kata-to-kr' ? 'TARGET KATAKANA — 알맞은 발음을 선택하세요!' :
-    quizMode === 'hira-to-kata' ? 'TARGET MATCH — 짝이 되는 가타카나를 고르세요!' :
-    `SOUND [${currentQ.target.romaji.toUpperCase()}] — 알맞은 글자를 고르세요!`;
+    answerType === 'typing'
+      ? 'TYPING STAGE — 한국어 발음(예: 아, 카) 또는 로마자(a, ka)를 직접 타이핑하세요!'
+      : quizMode === 'hira-to-kr' ? 'TARGET HIRAGANA — 알맞은 발음을 선택하세요!' :
+        quizMode === 'kata-to-kr' ? 'TARGET KATAKANA — 알맞은 발음을 선택하세요!' :
+        quizMode === 'hira-to-kata' ? 'TARGET MATCH — 짝이 되는 가타카나를 고르세요!' :
+        `SOUND [${currentQ.target.romaji.toUpperCase()}] — 알맞은 글자를 고르세요!`;
 
   return (
     <div className="max-w-3xl mx-auto space-y-5">
@@ -207,6 +287,48 @@ export default function SchoolSpeedQuizView({ studyState, onRecordResult, custom
         className="rounded-2xl p-4 bg-white space-y-3"
         style={{ border: '2px solid #BAE6FD', boxShadow: '0 4px 0 #BAE6FD' }}
       >
+        <div className="flex flex-wrap items-center justify-between gap-2 pb-2" style={{ borderBottom: '1.5px solid #E0F2FE' }}>
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs font-black text-sky-600 mr-1">STYLE:</span>
+            <button
+              onClick={() => setAnswerType('choice')}
+              className="px-3.5 py-1.5 rounded-lg text-xs font-black flex items-center gap-1 cursor-pointer transition skew-badge"
+              style={
+                answerType === 'choice'
+                  ? { backgroundColor: '#0284C7', color: '#FFFFFF', boxShadow: '0 2px 0 #0369A1' }
+                  : { backgroundColor: '#F0F9FF', color: '#0369A1', border: '1.5px solid #BAE6FD' }
+              }
+            >
+              <MousePointerClick className="w-3.5 h-3.5" />
+              <span>🔢 4지선다 스피드</span>
+            </button>
+            <button
+              onClick={() => setAnswerType('typing')}
+              className="px-3.5 py-1.5 rounded-lg text-xs font-black flex items-center gap-1 cursor-pointer transition skew-badge"
+              style={
+                answerType === 'typing'
+                  ? { backgroundColor: '#F43F5E', color: '#FFFFFF', boxShadow: '0 2px 0 #BE123C' }
+                  : { backgroundColor: '#FFE4E6', color: '#BE123C', border: '1.5px solid #FDA4AF' }
+              }
+            >
+              <Keyboard className="w-3.5 h-3.5" />
+              <span>⌨️ 주관식 직접 타이핑</span>
+            </button>
+          </div>
+
+          <div className="flex items-center gap-3 text-xs font-black">
+            <span
+              className="px-3 py-1 rounded-md text-white skew-badge"
+              style={{ backgroundColor: '#F43F5E' }}
+            >
+              <span>⚡ {streak} COMBO!</span>
+            </span>
+            <span className="text-slate-500">
+              ACC {sessionSolved > 0 ? Math.round((sessionCorrect / sessionSolved) * 100) : 100}% ({sessionCorrect}/{sessionSolved})
+            </span>
+          </div>
+        </div>
+
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex flex-wrap gap-1.5">
             {QUIZ_MODES.map(m => (
@@ -223,18 +345,6 @@ export default function SchoolSpeedQuizView({ studyState, onRecordResult, custom
                 <span>{m.label}</span>
               </button>
             ))}
-          </div>
-
-          <div className="flex items-center gap-3 text-xs font-black">
-            <span
-              className="px-3 py-1 rounded-md text-white skew-badge"
-              style={{ backgroundColor: '#F43F5E' }}
-            >
-              <span>⚡ {streak} COMBO!</span>
-            </span>
-            <span className="text-slate-500">
-              ACC {sessionSolved > 0 ? Math.round((sessionCorrect / sessionSolved) * 100) : 100}% ({sessionCorrect}/{sessionSolved})
-            </span>
           </div>
         </div>
 
@@ -284,7 +394,11 @@ export default function SchoolSpeedQuizView({ studyState, onRecordResult, custom
         <div className="flex items-center justify-between text-xs font-black mb-2">
           <div className="flex items-center gap-2" style={{ color: '#0284C7' }}>
             <SchoolMascot mood={lastWasWrong ? 'oops' : streak >= 5 ? 'happy' : 'normal'} size="sm" />
-            <span>⚡ SPEED STAGE // 정답 시 0.2초 만에 다음 타겟으로 전환!</span>
+            <span>
+              {answerType === 'typing'
+                ? '⌨️ TYPING STAGE // 보기 없이 직접 발음을 입력해 기억을 각인시키세요!'
+                : '⚡ SPEED STAGE // 정답 시 0.2초 만에 다음 타겟으로 전환!'}
+            </span>
           </div>
           <button
             onClick={() => speakJapanese(currentQ.target.hira, studyState.settings.slowAudio)}
@@ -306,73 +420,106 @@ export default function SchoolSpeedQuizView({ studyState, onRecordResult, custom
           <p className="text-xs sm:text-sm font-black mt-3" style={{ color: '#0284C7' }}>{promptSub}</p>
         </div>
 
-        {/* 4지선다 버튼 */}
-        <div className="grid grid-cols-2 gap-3 sm:gap-4 max-w-xl mx-auto">
-          {currentQ.options.map((opt, idx) => {
-            const optionLabel =
-              quizMode === 'hira-to-kr' || quizMode === 'kata-to-kr'
-                ? `${opt.kr.split('(')[0]} (${opt.romaji})`
-                : quizMode === 'hira-to-kata'
-                ? opt.kata
-                : `${opt.hira} (${opt.kata})`;
+        {/* 1) 4지선다 모드 vs 2) 주관식 직접 타이핑 모드 */}
+        {answerType === 'choice' ? (
+          <div className="grid grid-cols-2 gap-3 sm:gap-4 max-w-xl mx-auto">
+            {currentQ.options.map((opt, idx) => {
+              const optionLabel =
+                quizMode === 'hira-to-kr' || quizMode === 'kata-to-kr'
+                  ? `${opt.kr.split('(')[0]} (${opt.romaji})`
+                  : quizMode === 'hira-to-kata'
+                  ? opt.kata
+                  : `${opt.hira} (${opt.kata})`;
 
-            let inlineStyle = {
-              backgroundColor: '#F8FAFC',
-              border: '2px solid #CBD5E1',
-              borderBottom: '4px solid #94A3B8',
-              color: '#0F172A'
-            };
+              let inlineStyle = {
+                backgroundColor: '#F8FAFC',
+                border: '2px solid #CBD5E1',
+                borderBottom: '4px solid #94A3B8',
+                color: '#0F172A'
+              };
 
-            if (isFeedback) {
-              if (idx === currentQ.correctIndex) {
-                inlineStyle = {
-                  backgroundColor: '#0284C7',
-                  border: '2px solid #0369A1',
-                  borderBottom: '4px solid #0C4A6E',
-                  color: '#FFFFFF',
-                  transform: 'scale(1.02)'
-                };
-              } else if (idx === selectedIdx) {
-                inlineStyle = {
-                  backgroundColor: '#F43F5E',
-                  border: '2px solid #E11D48',
-                  borderBottom: '4px solid #9F1239',
-                  color: '#FFFFFF'
-                };
-              } else {
-                inlineStyle = {
-                  backgroundColor: '#F1F5F9',
-                  border: '2px solid #E2E8F0',
-                  color: '#94A3B8',
-                  opacity: 0.6
-                };
+              if (isFeedback) {
+                if (idx === currentQ.correctIndex) {
+                  inlineStyle = {
+                    backgroundColor: '#0284C7',
+                    border: '2px solid #0369A1',
+                    borderBottom: '4px solid #0C4A6E',
+                    color: '#FFFFFF',
+                    transform: 'scale(1.02)'
+                  };
+                } else if (idx === selectedIdx) {
+                  inlineStyle = {
+                    backgroundColor: '#F43F5E',
+                    border: '2px solid #E11D48',
+                    borderBottom: '4px solid #9F1239',
+                    color: '#FFFFFF'
+                  };
+                } else {
+                  inlineStyle = {
+                    backgroundColor: '#F1F5F9',
+                    border: '2px solid #E2E8F0',
+                    color: '#94A3B8',
+                    opacity: 0.6
+                  };
+                }
               }
-            }
 
-            return (
-              <button
-                key={opt.id}
-                onClick={() => handleSelectOption(idx)}
-                disabled={isFeedback}
-                className="relative py-4 px-5 rounded-2xl font-black text-xl sm:text-2xl transition-all cursor-pointer flex items-center justify-between"
-                style={inlineStyle}
-              >
-                <span
-                  className="text-xs font-black px-2 py-0.5 rounded skew-badge"
-                  style={
-                    isFeedback && (idx === currentQ.correctIndex || idx === selectedIdx)
-                      ? { backgroundColor: 'rgba(255,255,255,0.25)', color: '#FFFFFF' }
-                      : { backgroundColor: '#E0F2FE', color: '#0284C7' }
-                  }
+              return (
+                <button
+                  key={opt.id}
+                  onClick={() => handleSelectOption(idx)}
+                  disabled={isFeedback}
+                  className="relative py-4 px-5 rounded-2xl font-black text-xl sm:text-2xl transition-all cursor-pointer flex items-center justify-between"
+                  style={inlineStyle}
                 >
-                  <span>0{idx + 1}</span>
-                </span>
-                <span className="mx-auto">{optionLabel}</span>
-                <span className="w-5 text-sm">{isFeedback && idx === currentQ.correctIndex ? '♪' : ''}</span>
+                  <span
+                    className="text-xs font-black px-2 py-0.5 rounded skew-badge"
+                    style={
+                      isFeedback && (idx === currentQ.correctIndex || idx === selectedIdx)
+                        ? { backgroundColor: 'rgba(255,255,255,0.25)', color: '#FFFFFF' }
+                        : { backgroundColor: '#E0F2FE', color: '#0284C7' }
+                    }
+                  >
+                    <span>0{idx + 1}</span>
+                  </span>
+                  <span className="mx-auto">{optionLabel}</span>
+                  <span className="w-5 text-sm">{isFeedback && idx === currentQ.correctIndex ? '♪' : ''}</span>
+                </button>
+              );
+            })}
+          </div>
+        ) : (
+          <form onSubmit={handleTypingSubmit} className="max-w-md mx-auto space-y-3">
+            <div className="flex items-center gap-2">
+              <input
+                ref={typingInputRef}
+                type="text"
+                value={typingInput}
+                onChange={(e) => setTypingInput(e.target.value)}
+                placeholder="발음 입력 (예: 아, 카, 사 또는 a, ka, sa)"
+                autoFocus
+                className="flex-1 px-4 py-3.5 rounded-2xl text-center text-xl font-black outline-none transition"
+                style={
+                  typingSuccessFlash
+                    ? { backgroundColor: '#DCFCE7', color: '#166534', border: '3px solid #22C55E' }
+                    : lastWasWrong
+                    ? { backgroundColor: '#FFE4E6', color: '#BE123C', border: '3px solid #F43F5E' }
+                    : { backgroundColor: '#F8FAFC', color: '#0F172A', border: '2.5px solid #38BDF8' }
+                }
+              />
+              <button
+                type="submit"
+                className="px-6 py-3.5 rounded-2xl font-black text-base text-white cursor-pointer shrink-0 skew-badge"
+                style={{ backgroundColor: '#0284C7', borderBottom: '4px solid #0369A1' }}
+              >
+                <span>{lastWasWrong ? 'NEXT ↵' : 'ENTER ↵'}</span>
               </button>
-            );
-          })}
-        </div>
+            </div>
+            <p className="text-xs font-bold text-slate-500">
+              💡 한글 발음(<strong>{currentQ.target.kr.split('(')[0]}</strong>) 또는 영문 로마자(<strong>{currentQ.target.romaji}</strong>)를 치고 <strong>Enter</strong>를 누르세요!
+            </p>
+          </form>
+        )}
 
         {/* 오답 시 유이 선배의 코칭 대사창 */}
         {lastWasWrong && (
@@ -417,7 +564,9 @@ export default function SchoolSpeedQuizView({ studyState, onRecordResult, custom
         >
           <span className="flex items-center gap-1.5">
             <Keyboard className="w-3.5 h-3.5 text-sky-500" />
-            키보드 숫자키 <strong>1 ~ 4</strong>로 즉시 타겟 선택 · <strong>Space</strong>로 발음 재생 / 다음 스테이지
+            {answerType === 'choice'
+              ? '키보드 숫자키 1 ~ 4로 즉시 타겟 선택 · Space로 발음 재생 / 다음 스테이지'
+              : '한국어 발음 또는 로마자를 입력하고 Enter 키를 누르세요!'}
           </span>
         </div>
       </div>

@@ -233,13 +233,19 @@ async function callGeminiJson(apiKey, promptText) {
 }
 
 // 1. Gemini AI 자유 상황극 응답 생성
-export async function generateAiRoleplayTurn(apiKey, scenario, history, userInput) {
+export async function generateAiRoleplayTurn(apiKey, scenario, history, userInput, theme = 'ghibli') {
   const historyStr = history
     .map(h => `${h.role === 'npc' ? '점원' : '학습자'}: ${h.jp || h.text}`)
     .join('\n');
 
+  const isSchool = theme === 'school';
+  const personaDesc = isSchool
+    ? "일본어 완전 입문자를 가르치는 청량하고 다정한 고등학교 일본어부 선배('유이 선배')입니다."
+    : "일본어 완전 입문자를 가르치는 친절하고 귀여운 고양이 선생님('냐옹 점원')입니다.";
+  const toneDesc = isSchool ? "상큼하고 다정한 선배 말투 (~야!, ~해 봐!)" : "친근한 ~다옹! 말투";
+
   const prompt = `
-당신은 일본어 완전 입문자를 가르치는 친절하고 귀여운 고양이 선생님('냐옹 점원')입니다.
+당신은 ${personaDesc}
 현재 상황극 배경: "${scenario.title}" (${scenario.place})
 지금까지의 대화:
 ${historyStr}
@@ -249,7 +255,7 @@ ${historyStr}
 다음 JSON 형식으로만 응답하세요:
 {
   "understoodAs": "학습자가 말하려 한 일본어 문장 (히라가나/가타카나 표기 및 한국어 발음)",
-  "coachTip": "학습자의 표현에 대한 칭찬 한 줄 또는 더 자연스러운 왕초보 표현 교정 팁 (친근한 ~다옹! 말투)",
+  "coachTip": "학습자의 표현에 대한 칭찬 한 줄 또는 더 자연스러운 왕초보 표현 교정 팁 (${toneDesc})",
   "npcJp": "점원으로서 이어서 할 짧고 쉬운 일본어 대답 (한자 쓰지 말고 히라가나/가타카나 위주로)",
   "npcKr": "npcJp의 한국어 발음 표기",
   "npcMeaning": "npcJp의 한국어 뜻",
@@ -261,14 +267,20 @@ ${historyStr}
 }
 
 // 2. 왕초보 1초 질문함
-export async function askAiBeginnerQuestion(apiKey, question) {
+export async function askAiBeginnerQuestion(apiKey, question, theme = 'ghibli') {
+  const isSchool = theme === 'school';
+  const personaDesc = isSchool
+    ? "일본어 왕초보(완전 입문자) 전용 청량한 고등학교 일본어부 '유이 선배'입니다."
+    : "일본어 왕초보(완전 입문자) 전용 과외 선생님 '냐옹 선생님'입니다.";
+  const toneDesc = isSchool ? "~야!, ~거든! 같은 다정한 선배 말투" : "~다옹! 말투";
+
   const prompt = `
-당신은 일본어 왕초보(완전 입문자) 전용 과외 선생님 '냐옹 선생님'입니다.
+당신은 ${personaDesc}
 학습자의 질문: "${question}"
 
 어려운 문법 용어(예: 연용형, 조사, 활용 등)를 최소화하고, 초등학생도 10초 만에 이해할 수 있게 아래 JSON 형식으로 핵심만 답변하세요:
 {
-  "summary": "한 줄 핵심 결론 (~다옹! 말투)",
+  "summary": "한 줄 핵심 결론 (${toneDesc})",
   "explanation": "쉬운 비유를 든 2~3문장 설명",
   "examples": [
     { "jp": "예시 일본어(히라가나/가타카나)", "kr": "한국어 발음", "meaning": "한국어 뜻" },
