@@ -3,13 +3,35 @@
 @layer base {
   body {
     font-family: 'Pretendard', 'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', 'Noto Sans JP', sans-serif;
-    background-color: #F6F0E1;
-    background-image: radial-gradient(#D8CBB8 0.85px, transparent 0.85px);
-    background-size: 20px 20px;
-    color: #3A322C;
     margin: 0;
     -webkit-font-smoothing: antialiased;
   }
+}
+
+/* 테마 1: 지브리 여름방학 그림일기 배경 */
+.theme-ghibli-bg {
+  background-color: #F6F0E1;
+  background-image: radial-gradient(#D8CBB8 0.85px, transparent 0.85px);
+  background-size: 20px 20px;
+  color: #3A322C;
+}
+
+/* 테마 2: 청량 학원물 애니 배경 */
+.theme-school-bg {
+  background-color: #E8F6FF;
+  background-image:
+    radial-gradient(#BAE6FD 1px, transparent 1px),
+    linear-gradient(135deg, #E0F2FE 0%, #F0F9FF 55%, #FFFFFF 100%);
+  background-size: 22px 22px, 100% 100%;
+  color: #0F172A;
+}
+
+.skew-badge {
+  transform: skewX(-10deg);
+}
+.skew-badge > span {
+  display: inline-block;
+  transform: skewX(10deg);
 }
 
 /* 스케치북 종이 카드 */
