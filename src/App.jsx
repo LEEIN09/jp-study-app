@@ -5,6 +5,7 @@ import {
   Layers,
   MessageSquare,
   Calculator,
+  Mic,
   RotateCcw,
   AlertTriangle,
   Share2,
@@ -24,6 +25,7 @@ import {
 } from './utils/storage';
 import NekoMascot from './components/NekoMascot';
 import SchoolMascot from './components/SchoolMascot';
+import CurriculumBar from './components/CurriculumBar';
 
 // 버전 1: 지브리 여름방학 그림일기 컴포넌트
 import KanaTableView from './components/KanaTableView';
@@ -31,6 +33,7 @@ import SpeedQuizView from './components/SpeedQuizView';
 import VocabFlashcardView from './components/VocabFlashcardView';
 import PatternBuilderView from './components/PatternBuilderView';
 import NumberSpecialView from './components/NumberSpecialView';
+import AiRoleplaySpeakingView from './components/AiRoleplaySpeakingView';
 
 // 버전 2: 청량 학원물 방과후 일본어부 컴포넌트
 import SchoolKanaTableView from './components/school/SchoolKanaTableView';
@@ -43,7 +46,8 @@ const GHIBLI_TABS = [
   { id: 'quiz', label: '2. 칠판 스피드 퀴즈', icon: Zap, badge: '객관식+타이핑' },
   { id: 'vocab', label: '3. 여름방학 단어장', icon: Layers, badge: '필수 55단어' },
   { id: 'pattern', label: '4. 조각 문장 조립', icon: MessageSquare, badge: '실전 회화' },
-  { id: 'number', label: '5. 숫자·가격·특수음', icon: Calculator, badge: '⚠️함정 특훈' }
+  { id: 'number', label: '5. 숫자·가격·특수음', icon: Calculator, badge: '⚠️함정 특훈' },
+  { id: 'ai', label: '6. 스피킹·AI 상황극', icon: Mic, badge: '🎙️실전 주문' }
 ];
 
 const SCHOOL_TABS = [
@@ -51,7 +55,8 @@ const SCHOOL_TABS = [
   { id: 'quiz', label: 'STEP 02. 스피드 배틀', icon: Zap, badge: '0.2s DRILL' },
   { id: 'vocab', label: 'STEP 03. 필수 단어장', icon: Layers, badge: '55 WORDS' },
   { id: 'pattern', label: 'STEP 04. 실전 대사 조립', icon: MessageSquare, badge: 'TALK' },
-  { id: 'number', label: 'STEP 05. 숫자·특수음', icon: Calculator, badge: 'TRAP' }
+  { id: 'number', label: 'STEP 05. 숫자·특수음', icon: Calculator, badge: 'TRAP' },
+  { id: 'ai', label: 'STEP 06. 스피킹·상황극', icon: Mic, badge: 'AI & MIC' }
 ];
 
 export default function App() {
@@ -131,7 +136,6 @@ export default function App() {
     }
   };
 
-  // 현재 학습 데이터를 짧은 Base64 코드로 변환
   const exportCodeString = useMemo(() => {
     try {
       const payload = {
@@ -367,7 +371,7 @@ export default function App() {
             </div>
           </div>
 
-          <div className="max-w-6xl mx-auto px-4 flex items-center gap-2 overflow-x-auto pb-2.5 pt-1">
+          <div className="max-w-6xl mx-auto px-4 flex items-center gap-1.5 overflow-x-auto pb-2.5 pt-1">
             {GHIBLI_TABS.map(tab => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
@@ -375,7 +379,7 @@ export default function App() {
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
-                  className="px-4 py-2 rounded-full font-extrabold text-xs sm:text-sm flex items-center gap-2 whitespace-nowrap transition-all cursor-pointer"
+                  className="px-3.5 py-2 rounded-full font-extrabold text-xs sm:text-sm flex items-center gap-1.5 whitespace-nowrap transition-all cursor-pointer"
                   style={
                     isActive
                       ? {
@@ -391,10 +395,10 @@ export default function App() {
                         }
                   }
                 >
-                  <Icon className="w-4 h-4" />
+                  <Icon className="w-3.5 h-3.5" />
                   <span>{tab.label}</span>
                   <span
-                    className="text-xs px-2 py-0.5 rounded-full font-bold hidden lg:inline-block"
+                    className="text-[11px] px-2 py-0.5 rounded-full font-bold hidden xl:inline-block"
                     style={
                       isActive
                         ? { backgroundColor: '#E5A93C', color: '#1F2421' }
@@ -408,6 +412,13 @@ export default function App() {
             })}
           </div>
         </header>
+
+        {/* 날짜 없는 7관문 맞춤 코스 네비게이션 바 */}
+        <CurriculumBar
+          studyState={studyState}
+          onNavigateTab={(tabId) => setActiveTab(tabId)}
+          onStartCustomQuiz={handleStartRowQuiz}
+        />
 
         <main className="flex-1 max-w-6xl w-full mx-auto px-4 py-6">
           {activeTab === 'table' && (
@@ -438,6 +449,11 @@ export default function App() {
           )}
           {activeTab === 'number' && (
             <NumberSpecialView
+              studyState={studyState}
+            />
+          )}
+          {activeTab === 'ai' && (
+            <AiRoleplaySpeakingView
               studyState={studyState}
             />
           )}
@@ -531,7 +547,7 @@ export default function App() {
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className="px-4 py-2 rounded-xl font-black text-xs sm:text-sm flex items-center gap-2 whitespace-nowrap transition-all cursor-pointer skew-badge"
+                className="px-3.5 py-2 rounded-xl font-black text-xs sm:text-sm flex items-center gap-1.5 whitespace-nowrap transition-all cursor-pointer skew-badge"
                 style={
                   isActive
                     ? {
@@ -546,10 +562,10 @@ export default function App() {
                       }
                 }
               >
-                <Icon className="w-4 h-4" />
+                <Icon className="w-3.5 h-3.5" />
                 <span>{tab.label}</span>
                 <span
-                  className="text-xs px-2 py-0.5 rounded font-black hidden lg:inline-block"
+                  className="text-[11px] px-2 py-0.5 rounded font-black hidden xl:inline-block"
                   style={
                     isActive
                       ? { backgroundColor: '#FEF08A', color: '#0F172A' }
@@ -593,6 +609,11 @@ export default function App() {
         )}
         {activeTab === 'number' && (
           <NumberSpecialView
+            studyState={studyState}
+          />
+        )}
+        {activeTab === 'ai' && (
+          <AiRoleplaySpeakingView
             studyState={studyState}
           />
         )}
