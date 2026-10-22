@@ -4,8 +4,13 @@ import {
   Zap,
   Layers,
   MessageSquare,
+  Calculator,
   RotateCcw,
-  AlertTriangle
+  AlertTriangle,
+  Share2,
+  Copy,
+  Check,
+  X
 } from 'lucide-react';
 import { KANA_DATA } from './data/kanaData';
 import { VOCAB_DATA } from './data/vocabData';
@@ -20,11 +25,12 @@ import {
 import NekoMascot from './components/NekoMascot';
 import SchoolMascot from './components/SchoolMascot';
 
-// 버전 1: 지브리 여름방학 그림일기 컴포넌트 (원본 그대로 유지)
+// 버전 1: 지브리 여름방학 그림일기 컴포넌트
 import KanaTableView from './components/KanaTableView';
 import SpeedQuizView from './components/SpeedQuizView';
 import VocabFlashcardView from './components/VocabFlashcardView';
 import PatternBuilderView from './components/PatternBuilderView';
+import NumberSpecialView from './components/NumberSpecialView';
 
 // 버전 2: 청량 학원물 방과후 일본어부 컴포넌트
 import SchoolKanaTableView from './components/school/SchoolKanaTableView';
@@ -34,16 +40,18 @@ import SchoolPatternView from './components/school/SchoolPatternView';
 
 const GHIBLI_TABS = [
   { id: 'table', label: '1. 오십음도 원고지', icon: BookOpen, badge: '기초 글자' },
-  { id: 'quiz', label: '2. 칠판 스피드 퀴즈', icon: Zap, badge: '0.2초 반복' },
+  { id: 'quiz', label: '2. 칠판 스피드 퀴즈', icon: Zap, badge: '객관식+타이핑' },
   { id: 'vocab', label: '3. 여름방학 단어장', icon: Layers, badge: '필수 55단어' },
-  { id: 'pattern', label: '4. 조각 문장 조립', icon: MessageSquare, badge: '실전 회화' }
+  { id: 'pattern', label: '4. 조각 문장 조립', icon: MessageSquare, badge: '실전 회화' },
+  { id: 'number', label: '5. 숫자·가격·특수음', icon: Calculator, badge: '⚠️함정 특훈' }
 ];
 
 const SCHOOL_TABS = [
   { id: 'table', label: 'STEP 01. 오십음도 미션', icon: BookOpen, badge: 'KANA' },
   { id: 'quiz', label: 'STEP 02. 스피드 배틀', icon: Zap, badge: '0.2s DRILL' },
   { id: 'vocab', label: 'STEP 03. 필수 단어장', icon: Layers, badge: '55 WORDS' },
-  { id: 'pattern', label: 'STEP 04. 실전 대사 조립', icon: MessageSquare, badge: 'TALK' }
+  { id: 'pattern', label: 'STEP 04. 실전 대사 조립', icon: MessageSquare, badge: 'TALK' },
+  { id: 'number', label: 'STEP 05. 숫자·특수음', icon: Calculator, badge: 'TRAP' }
 ];
 
 export default function App() {
@@ -51,7 +59,13 @@ export default function App() {
   const [studyState, setStudyState] = useState(() => loadStudyState());
   const [customQuizScope, setCustomQuizScope] = useState(null);
 
-  const currentTheme = studyState.settings.theme || 'ghibli'; // 'ghibli' | 'school'
+  // 기기 간 진도 옮기기 모달 상태
+  const [showSyncModal, setShowSyncModal] = useState(false);
+  const [importCode, setImportCode] = useState('');
+  const [copied, setCopied] = useState(false);
+
+  const currentTheme = studyState.settings.theme || 'ghibli';
+  const sfxEnabled = studyState.settings.soundFx !== false;
 
   const handleSelectTheme = (themeKey) => {
     setStudyState(prev => updateSettings(prev, { theme: themeKey }));
@@ -107,13 +121,56 @@ export default function App() {
     setStudyState(prev => updateSettings(prev, { slowAudio: !prev.settings.slowAudio }));
   };
 
+  const handleToggleSoundFx = () => {
+    setStudyState(prev => updateSettings(prev, { soundFx: !sfxEnabled }));
+  };
+
   const handleReset = () => {
     if (window.confirm('모든 암기 기록과 오답 데이터를 처음부터 초기화할까요?')) {
       setStudyState(resetAllProgress());
     }
   };
 
-  // 최상단 버전 전환 스위치 바 (두 테마 공통)
+  // 현재 학습 데이터를 짧은 Base64 코드로 변환
+  const exportCodeString = useMemo(() => {
+    try {
+      const payload = {
+        k: studyState.kanaStats,
+        v: studyState.vocabStatus,
+        s: studyState.summary
+      };
+      return btoa(encodeURIComponent(JSON.stringify(payload)));
+    } catch {
+      return '';
+    }
+  }, [studyState]);
+
+  const handleCopyExportCode = () => {
+    navigator.clipboard.writeText(exportCodeString);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleImportCode = () => {
+    if (!importCode.trim()) return;
+    try {
+      const decoded = JSON.parse(decodeURIComponent(atob(importCode.trim())));
+      const nextState = {
+        ...studyState,
+        kanaStats: decoded.k || {},
+        vocabStatus: decoded.v || {},
+        summary: decoded.s || studyState.summary
+      };
+      saveStudyState(nextState);
+      setStudyState(nextState);
+      setImportCode('');
+      setShowSyncModal(false);
+      alert('학습 기록을 성공적으로 불러왔습니다! 🌿');
+    } catch {
+      alert('올바른 학습 기록 코드가 아닙니다. 다시 확인해 주세요!');
+    }
+  };
+
   const renderVersionSwitcher = () => (
     <div
       className="w-full py-1.5 px-4 text-xs font-extrabold flex items-center justify-center sm:justify-between flex-wrap gap-2"
@@ -153,13 +210,78 @@ export default function App() {
     </div>
   );
 
-  // =========================================================
-  // 버전 1: 지브리풍 여름방학 그림일기 렌더링 (기존 완벽 보존)
-  // =========================================================
+  const renderSyncModal = () => {
+    if (!showSyncModal) return null;
+    return (
+      <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+        <div className="ghibli-paper rounded-3xl p-6 max-w-md w-full space-y-4 animate-fadeIn">
+          <div className="flex items-center justify-between">
+            <h3 className="font-black text-base flex items-center gap-2" style={{ color: '#2D4A3E' }}>
+              📦 PC ↔ 스마트폰 학습 기록 옮기기
+            </h3>
+            <button
+              onClick={() => setShowSyncModal(false)}
+              className="p-1.5 rounded-full hover:bg-black/5 cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          <p className="text-xs font-bold leading-relaxed" style={{ color: '#5C4E41' }}>
+            별도 회원가입 없이, 아래 <strong>내 기록 코드</strong>를 복사해 카카오톡 나에게 보내기 등으로 다른 기기에 붙여넣으면 도토리·단어·오답 기록이 그대로 이어집니다!
+          </p>
+
+          <div className="space-y-1.5">
+            <label className="text-xs font-black" style={{ color: '#2D4A3E' }}>1. 현재 기기의 기록 코드 복사하기</label>
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                readOnly
+                value={exportCodeString}
+                className="flex-1 px-3 py-2 rounded-xl text-xs font-mono outline-none"
+                style={{ backgroundColor: '#FAF6EE', border: '1.5px solid #C7B69E', color: '#5C4E41' }}
+              />
+              <button
+                onClick={handleCopyExportCode}
+                className="px-3.5 py-2 rounded-xl text-xs font-black flex items-center gap-1 cursor-pointer shrink-0"
+                style={{ backgroundColor: '#2D4A3E', color: '#FEFCE8' }}
+              >
+                {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                {copied ? '복사됨!' : '코드 복사'}
+              </button>
+            </div>
+          </div>
+
+          <div className="space-y-1.5 pt-2" style={{ borderTop: '1.5px dashed #D5C7B2' }}>
+            <label className="text-xs font-black" style={{ color: '#B45309' }}>2. 다른 기기에서 복사한 코드 붙여넣기</label>
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                value={importCode}
+                onChange={(e) => setImportCode(e.target.value)}
+                placeholder="여기에 코드를 붙여넣으세요"
+                className="flex-1 px-3 py-2 rounded-xl text-xs font-mono outline-none"
+                style={{ backgroundColor: '#FFFFFF', border: '1.5px solid #D97706', color: '#2D4A3E' }}
+              />
+              <button
+                onClick={handleImportCode}
+                className="px-3.5 py-2 rounded-xl text-xs font-black cursor-pointer shrink-0"
+                style={{ backgroundColor: '#F59E0B', color: '#FFFFFF' }}
+              >
+                불러오기
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   if (currentTheme === 'ghibli') {
     return (
       <div className="min-h-screen flex flex-col theme-ghibli-bg">
         {renderVersionSwitcher()}
+        {renderSyncModal()}
 
         <header
           className="sticky top-0 z-30 backdrop-blur-md"
@@ -184,31 +306,54 @@ export default function App() {
               </div>
             </div>
 
-            <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
               {weakKanaCount > 0 && (
                 <button
                   onClick={() => {
                     const weakIds = KANA_DATA.filter(k => (studyState.kanaStats[k.id]?.wrong || 0) > 0).map(k => k.id);
                     handleStartRowQuiz(weakIds, `헷갈린 글자 (${weakIds.length}개)`);
                   }}
-                  className="px-3 py-1.5 rounded-full text-xs font-extrabold flex items-center gap-1.5 transition cursor-pointer shadow-2xs"
+                  className="px-3 py-1.5 rounded-full text-xs font-extrabold flex items-center gap-1 transition cursor-pointer shadow-2xs"
                   style={{ backgroundColor: '#FEE2E2', color: '#991B1B', border: '1.5px solid #F87171' }}
                 >
                   <AlertTriangle className="w-3.5 h-3.5" />
-                  🐾 헷갈린 글자 {weakKanaCount}개 복습
+                  🐾 헷갈린 {weakKanaCount}개
                 </button>
               )}
 
               <button
+                onClick={handleToggleSoundFx}
+                className="px-2.5 py-1.5 rounded-full text-xs font-extrabold transition cursor-pointer"
+                style={
+                  sfxEnabled
+                    ? { backgroundColor: '#ECFCCB', color: '#365314', border: '1.5px solid #84CC16' }
+                    : { backgroundColor: '#FAF6EE', color: '#8C7A6B', border: '1.5px solid #C7B69E' }
+                }
+                title="정답/오답 차임벨 효과음 켜기/끄기"
+              >
+                {sfxEnabled ? '🔔 효과음 ON' : '🔕 효과음 OFF'}
+              </button>
+
+              <button
                 onClick={handleToggleSlowAudio}
-                className="px-3 py-1.5 rounded-full text-xs font-extrabold flex items-center gap-1 transition cursor-pointer"
+                className="px-2.5 py-1.5 rounded-full text-xs font-extrabold flex items-center gap-1 transition cursor-pointer"
                 style={
                   studyState.settings.slowAudio
                     ? { backgroundColor: '#FEF3C7', color: '#92400E', border: '1.5px solid #F59E0B' }
                     : { backgroundColor: '#FFFDF8', color: '#5C4E41', border: '1.5px solid #C7B69E' }
                 }
               >
-                <span>{studyState.settings.slowAudio ? '🐢 느린 발음 (0.7x)' : '🐇 기본 발음 (1.0x)'}</span>
+                <span>{studyState.settings.slowAudio ? '🐢 느린 발음' : '🐇 기본 발음'}</span>
+              </button>
+
+              <button
+                onClick={() => setShowSyncModal(true)}
+                className="px-2.5 py-1.5 rounded-full text-xs font-extrabold flex items-center gap-1 transition cursor-pointer"
+                style={{ backgroundColor: '#FFFDF8', color: '#2D4A3E', border: '1.5px solid #C7B69E' }}
+                title="PC와 스마트폰 간 학습 기록 코드 옮기기"
+              >
+                <Share2 className="w-3.5 h-3.5" />
+                <span className="hidden md:inline">기록 옮기기</span>
               </button>
 
               <button
@@ -249,7 +394,7 @@ export default function App() {
                   <Icon className="w-4 h-4" />
                   <span>{tab.label}</span>
                   <span
-                    className="text-xs px-2 py-0.5 rounded-full font-bold hidden md:inline-block"
+                    className="text-xs px-2 py-0.5 rounded-full font-bold hidden lg:inline-block"
                     style={
                       isActive
                         ? { backgroundColor: '#E5A93C', color: '#1F2421' }
@@ -291,17 +436,21 @@ export default function App() {
               studyState={studyState}
             />
           )}
+          {activeTab === 'number' && (
+            <NumberSpecialView
+              studyState={studyState}
+            />
+          )}
         </main>
       </div>
     );
   }
 
-  // =========================================================
-  // 버전 2: 청량 학원물 애니 (블루아카풍 방과후 일본어부) 렌더링
-  // =========================================================
+  // 버전 2: 청량 학원물 일본어부
   return (
     <div className="min-h-screen flex flex-col theme-school-bg">
       {renderVersionSwitcher()}
+      {renderSyncModal()}
 
       <header
         className="sticky top-0 z-30 backdrop-blur-md"
@@ -356,6 +505,15 @@ export default function App() {
             </button>
 
             <button
+              onClick={() => setShowSyncModal(true)}
+              className="px-3 py-1.5 rounded-lg text-xs font-black flex items-center gap-1 transition cursor-pointer skew-badge"
+              style={{ backgroundColor: '#F0F9FF', color: '#0284C7', border: '1.5px solid #BAE6FD' }}
+            >
+              <Share2 className="w-3.5 h-3.5" />
+              <span>SYNC</span>
+            </button>
+
+            <button
               onClick={handleReset}
               className="p-2 rounded-lg transition cursor-pointer hover:bg-sky-50 text-slate-400 hover:text-rose-500"
               title="학습 데이터 초기화"
@@ -391,7 +549,7 @@ export default function App() {
                 <Icon className="w-4 h-4" />
                 <span>{tab.label}</span>
                 <span
-                  className="text-xs px-2 py-0.5 rounded font-black hidden md:inline-block"
+                  className="text-xs px-2 py-0.5 rounded font-black hidden lg:inline-block"
                   style={
                     isActive
                       ? { backgroundColor: '#FEF08A', color: '#0F172A' }
@@ -430,6 +588,11 @@ export default function App() {
         )}
         {activeTab === 'pattern' && (
           <SchoolPatternView
+            studyState={studyState}
+          />
+        )}
+        {activeTab === 'number' && (
+          <NumberSpecialView
             studyState={studyState}
           />
         )}

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { Volume2, AlertCircle, Keyboard, MousePointerClick, CheckCircle2 } from 'lucide-react';
 import { KANA_DATA, CONFUSING_PAIRS } from '../data/kanaData';
 import { speakJapanese } from '../utils/tts';
+import { playCorrectSfx, playWrongSfx } from '../utils/sfx';
 import NekoMascot from './NekoMascot';
 
 const QUIZ_MODES = [
@@ -190,10 +191,16 @@ export default function SpeedQuizView({ studyState, onRecordResult, customScope,
 
     const isCorrect = idx === currentQ.correctIndex;
     const nextStreak = isCorrect ? streak + 1 : 0;
+    const sfxEnabled = studyState.settings.soundFx !== false;
 
     setStreak(nextStreak);
     setSessionSolved(s => s + 1);
-    if (isCorrect) setSessionCorrect(c => c + 1);
+    if (isCorrect) {
+      setSessionCorrect(c => c + 1);
+      playCorrectSfx(sfxEnabled, nextStreak);
+    } else {
+      playWrongSfx(sfxEnabled);
+    }
 
     onRecordResult(currentQ.target.id, isCorrect, nextStreak);
     speakJapanese(currentQ.target.hira, studyState.settings.slowAudio);
@@ -223,10 +230,16 @@ export default function SpeedQuizView({ studyState, onRecordResult, customScope,
     setIsFeedback(true);
     const isCorrect = isTypingAnswerCorrect(typingInput, currentQ.target);
     const nextStreak = isCorrect ? streak + 1 : 0;
+    const sfxEnabled = studyState.settings.soundFx !== false;
 
     setStreak(nextStreak);
     setSessionSolved(s => s + 1);
-    if (isCorrect) setSessionCorrect(c => c + 1);
+    if (isCorrect) {
+      setSessionCorrect(c => c + 1);
+      playCorrectSfx(sfxEnabled, nextStreak);
+    } else {
+      playWrongSfx(sfxEnabled);
+    }
 
     onRecordResult(currentQ.target.id, isCorrect, nextStreak);
     speakJapanese(currentQ.target.hira, studyState.settings.slowAudio);
