@@ -391,6 +391,34 @@ export default function SpeedQuizView({ studyState, onRecordResult, customScope,
 
       {/* 메인 교실 초록 칠판 스피드 퀴즈 보드 */}
       <div className="ghibli-chalkboard rounded-3xl p-6 sm:p-8 text-center relative overflow-hidden">
+        {/* 칠판 내부 상단: 객관식 vs 주관식 타이핑 큼직한 전환 스위치 */}
+        <div className="flex flex-wrap items-center justify-center gap-2 mb-5 pb-4" style={{ borderBottom: '1.5px dashed rgba(255,255,255,0.22)' }}>
+          <button
+            onClick={() => setAnswerType('choice')}
+            className="px-5 py-2.5 rounded-2xl text-xs sm:text-sm font-black flex items-center gap-2 transition cursor-pointer"
+            style={
+              answerType === 'choice'
+                ? { backgroundColor: '#F59E0B', color: '#FFFFFF', border: '2px solid #FEF08A', boxShadow: '0 3px 0 #B45309' }
+                : { backgroundColor: 'rgba(255,255,255,0.1)', color: '#FEFCE8', border: '1.5px dashed rgba(255,255,255,0.35)' }
+            }
+          >
+            <MousePointerClick className="w-4 h-4" />
+            👆 4지선다 객관식 모드
+          </button>
+          <button
+            onClick={() => setAnswerType('typing')}
+            className="px-5 py-2.5 rounded-2xl text-xs sm:text-sm font-black flex items-center gap-2 transition cursor-pointer"
+            style={
+              answerType === 'typing'
+                ? { backgroundColor: '#F59E0B', color: '#FFFFFF', border: '2px solid #FEF08A', boxShadow: '0 3px 0 #B45309' }
+                : { backgroundColor: 'rgba(255,255,255,0.1)', color: '#FEFCE8', border: '1.5px dashed rgba(255,255,255,0.35)' }
+            }
+          >
+            <Keyboard className="w-4 h-4" />
+            ⌨️ 주관식 직접 타이핑 모드
+          </button>
+        </div>
+
         {/* 칠판 상단 바 */}
         <div className="flex items-center justify-between text-xs font-bold mb-2" style={{ color: '#FDE68A' }}>
           <div className="flex items-center gap-2">
