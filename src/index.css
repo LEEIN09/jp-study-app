@@ -2,12 +2,36 @@
 
 @layer base {
   body {
-    font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans KR', 'Noto Sans JP', sans-serif;
-    background-color: #f8fafc;
-    color: #0f172a;
+    font-family: 'Pretendard', 'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', 'Noto Sans JP', sans-serif;
+    background-color: #F6F0E1;
+    background-image: radial-gradient(#D8CBB8 0.85px, transparent 0.85px);
+    background-size: 20px 20px;
+    color: #3A322C;
     margin: 0;
     -webkit-font-smoothing: antialiased;
   }
+}
+
+/* 스케치북 종이 카드 */
+.ghibli-paper {
+  background-color: #FFFDF8;
+  border: 2px solid #D5C7B2;
+  box-shadow: 0 4px 0 #DFD3C0;
+}
+
+/* 초록 칠판 프레임 */
+.ghibli-chalkboard {
+  background-color: #2D4A3E;
+  color: #FEFCE8;
+  border: 5px solid #A67B5B;
+  box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.28), 0 6px 0 #8A6245;
+}
+
+/* 원고지 십자 가이드라인 배경 */
+.genko-cell {
+  background-image:
+    linear-gradient(to right, transparent 49.5%, rgba(213, 199, 178, 0.35) 49.5%, rgba(213, 199, 178, 0.35) 50.5%, transparent 50.5%),
+    linear-gradient(to bottom, transparent 49.5%, rgba(213, 199, 178, 0.35) 49.5%, rgba(213, 199, 178, 0.35) 50.5%, transparent 50.5%);
 }
 
 @keyframes fadeIn {

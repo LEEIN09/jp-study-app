@@ -1,21 +1,22 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Volume2, Flame, RotateCcw, Zap, AlertCircle, CheckCircle2, Sparkles, Keyboard } from 'lucide-react';
+import { Volume2, AlertCircle, Keyboard } from 'lucide-react';
 import { KANA_DATA, CONFUSING_PAIRS } from '../data/kanaData';
 import { speakJapanese } from '../utils/tts';
+import NekoMascot from './NekoMascot';
 
 const QUIZ_MODES = [
-  { id: 'hira-to-kr', label: '히라가나 → 발음', desc: '글자 보고 한국어 발음 고르기' },
-  { id: 'kata-to-kr', label: '가타카나 → 발음', desc: '가타카나 보고 발음 고르기' },
-  { id: 'kr-to-kana', label: '발음/소리 → 글자', desc: '발음 듣고 알맞은 글자 고르기' },
-  { id: 'hira-to-kata', label: '히라가나 ↔ 가타카나', desc: '같은 소리의 가타카나 매칭' }
+  { id: 'hira-to-kr', label: '히라가나 → 발음' },
+  { id: 'kata-to-kr', label: '가타카나 → 발음' },
+  { id: 'kr-to-kana', label: '소리 듣고 → 글자 찾기' },
+  { id: 'hira-to-kata', label: '히라가나 ↔ 가타카나 짝꿍' }
 ];
 
 const SCOPES = [
-  { id: 'first-half', label: '입문 전반 (あ~な행 25자)' },
-  { id: 'second-half', label: '입문 후반 (は~ん 21자)' },
-  { id: 'all-seion', label: '청음 전체 (46자)' },
-  { id: 'dakuon', label: '탁음·반탁음' },
-  { id: 'weak-only', label: '🔥 오답·약점 글자만' }
+  { id: 'first-half', label: '🌱 앞부분 (あ~な행 25자)' },
+  { id: 'second-half', label: '🌿 뒷부분 (は~ん 21자)' },
+  { id: 'all-seion', label: '🌳 청음 전체 (46자)' },
+  { id: 'dakuon', label: '✨ 탁음·반탁음' },
+  { id: 'weak-only', label: '🐾 헷갈린 글자만 복습' }
 ];
 
 export default function SpeedQuizView({ studyState, onRecordResult, customScope, onClearCustomScope }) {
@@ -30,14 +31,12 @@ export default function SpeedQuizView({ studyState, onRecordResult, customScope,
   const [isFeedback, setIsFeedback] = useState(false);
   const [lastWasWrong, setLastWasWrong] = useState(false);
 
-  // customScope가 외부(오십음도 탭)에서 들어오면 즉시 반영
   useEffect(() => {
     if (customScope && customScope.ids?.length > 0) {
       setScope('custom');
     }
   }, [customScope]);
 
-  // 현재 출제 대상 풀 계산
   const activePool = useMemo(() => {
     if (scope === 'custom' && customScope?.ids?.length > 0) {
       return KANA_DATA.filter(k => customScope.ids.includes(k.id));
@@ -56,12 +55,13 @@ export default function SpeedQuizView({ studyState, onRecordResult, customScope,
     }
     if (scope === 'weak-only') {
       const weakList = KANA_DATA.filter(k => (studyState.kanaStats[k.id]?.wrong || 0) > 0);
-      return weakList.length >= 4 ? weakList : KANA_DATA.filter(k => (studyState.kanaStats[k.id]?.wrong || 0) > 0 || !studyState.kanaStats[k.id]?.mastered).slice(0, 15);
+      return weakList.length >= 4
+        ? weakList
+        : KANA_DATA.filter(k => (studyState.kanaStats[k.id]?.wrong || 0) > 0 || !studyState.kanaStats[k.id]?.mastered).slice(0, 15);
     }
     return KANA_DATA.filter(k => k.type === 'seion');
   }, [scope, customScope, studyState.kanaStats]);
 
-  // 가중치 기반 다음 문제 생성 (오답률 높은 글자 우선 출제 + 헷갈리는 글자 오답 보기 배치)
   const generateQuestion = useCallback((prevCharId = null) => {
     if (!activePool || activePool.length === 0) return;
 
@@ -69,7 +69,6 @@ export default function SpeedQuizView({ studyState, onRecordResult, customScope,
       ? activePool.filter(c => c.id !== prevCharId)
       : activePool;
 
-    // 가중치 부여: 기본 1 + (틀린 가중치 * 3) + (미마스터 시 +1.5)
     const weighted = candidates.map(c => {
       const st = studyState.kanaStats[c.id];
       const wrongWeight = (st?.wrong || 0) * 3.5;
@@ -88,7 +87,6 @@ export default function SpeedQuizView({ studyState, onRecordResult, customScope,
       }
     }
 
-    // 오답 보기(3개) 선정: 헷갈리는 쌍에 속해 있으면 우선 포함시켜 변별력 강화!
     const pairMatch = CONFUSING_PAIRS.find(p => p.chars.includes(target.id));
     const distractorIds = new Set();
 
@@ -98,7 +96,6 @@ export default function SpeedQuizView({ studyState, onRecordResult, customScope,
       });
     }
 
-    // 같은 행 글자들도 일부 후보로 추가
     const sameRow = KANA_DATA.filter(k => k.row === target.row && k.id !== target.id);
     sameRow.sort(() => Math.random() - 0.5).slice(0, 2).forEach(k => distractorIds.add(k.id));
 
@@ -127,7 +124,6 @@ export default function SpeedQuizView({ studyState, onRecordResult, customScope,
     setIsFeedback(false);
     setLastWasWrong(false);
 
-    // 소리 듣고 맞추기 모드이거나 자동 발음 설정 시 발음 재생
     if (quizMode === 'kr-to-kana' || studyState.settings.autoSpeak) {
       speakJapanese(target.hira, studyState.settings.slowAudio);
     }
@@ -154,17 +150,14 @@ export default function SpeedQuizView({ studyState, onRecordResult, customScope,
     speakJapanese(currentQ.target.hira, studyState.settings.slowAudio);
 
     if (isCorrect) {
-      // 정답이면 군더더기 없이 220ms 만에 즉시 다음 문제로 전환!
       setTimeout(() => {
         generateQuestion(currentQ.target.id);
       }, 220);
     } else {
-      // 오답이면 연상 암기법을 확인하고 넘어가도록 대기
       setLastWasWrong(true);
     }
   }, [currentQ, isFeedback, streak, onRecordResult, generateQuestion, studyState.settings.slowAudio]);
 
-  // 키보드 단축키 (1, 2, 3, 4 및 Space/Enter) 지원
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target?.tagName)) return;
@@ -195,7 +188,6 @@ export default function SpeedQuizView({ studyState, onRecordResult, customScope,
 
   if (!currentQ) return null;
 
-  // 문제 프롬프트 표시 텍스트 결정
   const promptMain =
     quizMode === 'hira-to-kr' ? currentQ.target.hira :
     quizMode === 'kata-to-kr' ? currentQ.target.kata :
@@ -203,54 +195,58 @@ export default function SpeedQuizView({ studyState, onRecordResult, customScope,
     currentQ.target.kr.split('(')[0];
 
   const promptSub =
-    quizMode === 'hira-to-kr' ? '이 히라가나의 발음은?' :
-    quizMode === 'kata-to-kr' ? '이 가타카나의 발음은?' :
-    quizMode === 'hira-to-kata' ? '짝이 되는 가타카나는?' :
-    `[${currentQ.target.romaji}] 소리에 해당하는 글자는?`;
+    quizMode === 'hira-to-kr' ? '칠판에 적힌 히라가나의 발음은 무엇일까요?' :
+    quizMode === 'kata-to-kr' ? '칠판에 적힌 가타카나의 발음은 무엇일까요?' :
+    quizMode === 'hira-to-kata' ? '짝꿍이 되는 가타카나를 골라보세요!' :
+    `[${currentQ.target.romaji}] 소리가 나는 글자를 골라보세요!`;
 
   return (
     <div className="max-w-3xl mx-auto space-y-5">
-      {/* 상단 모드 및 범위 선택 바 */}
-      <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-200 space-y-3">
+      {/* 상단 학습장 설정 패널 */}
+      <div className="ghibli-paper rounded-2xl p-4 space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex flex-wrap gap-1.5">
             {QUIZ_MODES.map(m => (
               <button
                 key={m.id}
                 onClick={() => setQuizMode(m.id)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+                className="px-3 py-1.5 rounded-full text-xs font-extrabold transition cursor-pointer"
+                style={
                   quizMode === m.id
-                    ? 'bg-indigo-600 text-white shadow-sm'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                }`}
+                    ? { backgroundColor: '#2D4A3E', color: '#FEFCE8' }
+                    : { backgroundColor: '#FAF6EE', color: '#5C4E41', border: '1.5px solid #D5C7B2' }
+                }
               >
                 {m.label}
               </button>
             ))}
           </div>
 
-          <div className="flex items-center gap-3 text-xs font-bold">
-            <span className="flex items-center gap-1 text-orange-600 bg-orange-50 px-2.5 py-1 rounded-lg border border-orange-200">
-              <Flame className="w-3.5 h-3.5 fill-orange-500" />
-              연속 {streak}연타
+          <div className="flex items-center gap-3 text-xs font-extrabold">
+            <span
+              className="px-3 py-1 rounded-full flex items-center gap-1"
+              style={{ backgroundColor: '#FEF3C7', color: '#92400E', border: '1.5px solid #F59E0B' }}
+            >
+              🌰 연속 {streak}개 성공!
             </span>
-            <span className="text-slate-500">
+            <span style={{ color: '#7D6E5D' }}>
               정답률 {sessionSolved > 0 ? Math.round((sessionCorrect / sessionSolved) * 100) : 100}% ({sessionCorrect}/{sessionSolved})
             </span>
           </div>
         </div>
 
-        {/* 출제 범위 선택 */}
-        <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-slate-100">
-          <span className="text-xs font-semibold text-slate-400 mr-1">출제 범위:</span>
+        {/* 출제 단원 선택 */}
+        <div className="flex flex-wrap items-center gap-1.5 pt-2" style={{ borderTop: '1.5px dashed #E2D6C3' }}>
+          <span className="text-xs font-extrabold mr-1" style={{ color: '#8C7A6B' }}>범위:</span>
           {customScope && (
             <button
               onClick={() => setScope('custom')}
-              className={`px-2.5 py-1 rounded-lg text-xs font-bold cursor-pointer flex items-center gap-1 ${
+              className="px-3 py-1 rounded-full text-xs font-extrabold cursor-pointer"
+              style={
                 scope === 'custom'
-                  ? 'bg-indigo-900 text-white'
-                  : 'bg-indigo-50 text-indigo-700'
-              }`}
+                  ? { backgroundColor: '#B45309', color: '#FFFBEB' }
+                  : { backgroundColor: '#FEF3C7', color: '#92400E' }
+              }
             >
               🎯 {customScope.label}
             </button>
@@ -262,13 +258,14 @@ export default function SpeedQuizView({ studyState, onRecordResult, customScope,
                 setScope(s.id);
                 if (onClearCustomScope) onClearCustomScope();
               }}
-              className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+              className="px-3 py-1 rounded-full text-xs font-extrabold transition cursor-pointer"
+              style={
                 scope === s.id
-                  ? 'bg-slate-900 text-white'
+                  ? { backgroundColor: '#B45309', color: '#FFFBEB' }
                   : s.id === 'weak-only' && weakCount > 0
-                  ? 'bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-              }`}
+                  ? { backgroundColor: '#FEE2E2', color: '#991B1B', border: '1.5px solid #F87171' }
+                  : { backgroundColor: '#FAF6EE', color: '#5C4E41', border: '1.5px solid #D5C7B2' }
+              }
             >
               {s.label} {s.id === 'weak-only' ? `(${weakCount})` : ''}
             </button>
@@ -276,31 +273,35 @@ export default function SpeedQuizView({ studyState, onRecordResult, customScope,
         </div>
       </div>
 
-      {/* 메인 스피드 퀴즈 카드 */}
-      <div className="bg-white rounded-3xl p-6 sm:p-8 shadow-md border border-slate-200 text-center relative overflow-hidden">
-        {/* 상단 힌트 & 발음 다시 듣기 */}
-        <div className="flex items-center justify-between text-xs text-slate-400 mb-2">
-          <span className="flex items-center gap-1 font-medium">
-            <Zap className="w-3.5 h-3.5 text-amber-500" />
-            정답 시 0.2초 만에 다음 문제로 넘어갑니다
-          </span>
+      {/* 메인 교실 초록 칠판 스피드 퀴즈 보드 */}
+      <div className="ghibli-chalkboard rounded-3xl p-6 sm:p-8 text-center relative overflow-hidden">
+        {/* 칠판 상단 바 */}
+        <div className="flex items-center justify-between text-xs font-bold mb-2" style={{ color: '#FDE68A' }}>
+          <div className="flex items-center gap-2">
+            <NekoMascot mood={lastWasWrong ? 'oops' : streak >= 5 ? 'happy' : 'normal'} size="sm" />
+            <span>🖍️ 정답을 맞히면 0.2초 만에 다음 문제로 넘어간다옹!</span>
+          </div>
           <button
             onClick={() => speakJapanese(currentQ.target.hira, studyState.settings.slowAudio)}
-            className="flex items-center gap-1 text-indigo-600 hover:text-indigo-800 font-bold bg-indigo-50 px-2.5 py-1 rounded-lg cursor-pointer"
+            className="flex items-center gap-1 font-extrabold px-3 py-1.5 rounded-full cursor-pointer transition"
+            style={{ backgroundColor: 'rgba(255,255,255,0.14)', color: '#FEF08A', border: '1.5px dashed rgba(255,255,255,0.4)' }}
           >
-            <Volume2 className="w-3.5 h-3.5" /> 발음 듣기 (Space)
+            <Volume2 className="w-3.5 h-3.5" /> 다시 듣기 (Space)
           </button>
         </div>
 
-        {/* 문제 글자 영역 */}
+        {/* 칠판 중앙 분필 글자 */}
         <div className="my-6">
-          <div className="text-7xl sm:text-8xl font-black text-slate-900 tracking-tight select-none">
+          <div
+            className="text-7xl sm:text-8xl font-black tracking-tight select-none"
+            style={{ color: '#FFFFFF', textShadow: '0 3px 0 rgba(0,0,0,0.22)' }}
+          >
             {promptMain}
           </div>
-          <p className="text-sm font-semibold text-slate-500 mt-3">{promptSub}</p>
+          <p className="text-sm font-bold mt-3" style={{ color: '#A7F3D0' }}>{promptSub}</p>
         </div>
 
-        {/* 4지선다 버튼 (키보드 1~4 매핑) */}
+        {/* 4지선다 분필 버튼 */}
         <div className="grid grid-cols-2 gap-3 sm:gap-4 max-w-xl mx-auto">
           {currentQ.options.map((opt, idx) => {
             const optionLabel =
@@ -310,14 +311,32 @@ export default function SpeedQuizView({ studyState, onRecordResult, customScope,
                 ? opt.kata
                 : `${opt.hira} (${opt.kata})`;
 
-            let btnStyle = 'border-slate-200 bg-slate-50/70 hover:bg-indigo-50/50 hover:border-indigo-300 text-slate-800';
+            let inlineStyle = {
+              backgroundColor: 'rgba(255, 255, 255, 0.1)',
+              border: '2px dashed rgba(255, 255, 255, 0.45)',
+              color: '#FEFCE8'
+            };
+
             if (isFeedback) {
               if (idx === currentQ.correctIndex) {
-                btnStyle = 'border-emerald-500 bg-emerald-500 text-white shadow-md scale-[1.02]';
+                inlineStyle = {
+                  backgroundColor: '#F59E0B',
+                  border: '2px solid #FEF08A',
+                  color: '#FFFFFF',
+                  transform: 'scale(1.02)'
+                };
               } else if (idx === selectedIdx) {
-                btnStyle = 'border-rose-500 bg-rose-500 text-white';
+                inlineStyle = {
+                  backgroundColor: '#DC2626',
+                  border: '2px solid #FCA5A5',
+                  color: '#FFFFFF'
+                };
               } else {
-                btnStyle = 'border-slate-200 bg-slate-100 text-slate-400 opacity-60';
+                inlineStyle = {
+                  backgroundColor: 'rgba(255, 255, 255, 0.04)',
+                  border: '2px dashed rgba(255, 255, 255, 0.18)',
+                  color: 'rgba(255, 255, 255, 0.4)'
+                };
               }
             }
 
@@ -326,55 +345,65 @@ export default function SpeedQuizView({ studyState, onRecordResult, customScope,
                 key={opt.id}
                 onClick={() => handleSelectOption(idx)}
                 disabled={isFeedback}
-                className={`relative py-4 px-5 rounded-2xl border-2 font-extrabold text-xl sm:text-2xl transition-all cursor-pointer flex items-center justify-between ${btnStyle}`}
+                className="relative py-4 px-5 rounded-2xl font-black text-xl sm:text-2xl transition-all cursor-pointer flex items-center justify-between hover:bg-white/20"
+                style={inlineStyle}
               >
-                <span className={`text-xs font-bold px-2 py-0.5 rounded-md ${
-                  isFeedback && (idx === currentQ.correctIndex || idx === selectedIdx)
-                    ? 'bg-white/20 text-white'
-                    : 'bg-slate-200/80 text-slate-500'
-                }`}>
+                <span
+                  className="text-xs font-extrabold px-2 py-0.5 rounded-full"
+                  style={{ backgroundColor: 'rgba(0,0,0,0.25)', color: '#FEF08A' }}
+                >
                   {idx + 1}
                 </span>
                 <span className="mx-auto">{optionLabel}</span>
-                <span className="w-5" />
+                <span className="w-5 text-sm">{isFeedback && idx === currentQ.correctIndex ? '⭕' : ''}</span>
               </button>
             );
           })}
         </div>
 
-        {/* 오답 시 즉시 뜨는 연상 암기 코칭 박스 */}
+        {/* 오답 시 뜨는 냐옹 선생님의 연상 암기 노트 */}
         {lastWasWrong && (
-          <div className="mt-6 p-4 rounded-2xl bg-rose-50 border border-rose-200 text-left max-w-xl mx-auto animate-fadeIn">
+          <div
+            className="mt-6 p-4 rounded-2xl text-left max-w-xl mx-auto animate-fadeIn"
+            style={{ backgroundColor: '#FFFDF8', color: '#3A322C', border: '3px solid #F59E0B' }}
+          >
             <div className="flex items-start justify-between gap-3">
-              <div className="space-y-1">
-                <div className="flex items-center gap-1.5 text-rose-800 font-extrabold text-sm">
-                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
-                  정답은 [{currentQ.target.hira} / {currentQ.target.kata}] — "{currentQ.target.kr}" ({currentQ.target.romaji}) 입니다!
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-1.5 font-black text-sm" style={{ color: '#B45309' }}>
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  앗! 정답은 [{currentQ.target.hira} / {currentQ.target.kata}] — “{currentQ.target.kr}” ({currentQ.target.romaji}) 이다옹!
                 </div>
-                <p className="text-xs text-slate-700 font-medium leading-relaxed pl-5">
-                  💡 <strong>암기 팁:</strong> {quizMode === 'kata-to-kr' || quizMode === 'hira-to-kata' ? currentQ.target.mnemonicKata : currentQ.target.mnemonicHira}
+                <p className="text-xs sm:text-sm font-bold leading-relaxed pl-5" style={{ color: '#2D4A3E' }}>
+                  🐾 <strong>냐옹이 비법:</strong> {quizMode === 'kata-to-kr' || quizMode === 'hira-to-kata' ? currentQ.target.mnemonicKata : currentQ.target.mnemonicHira}
                 </p>
                 {currentQ.target.confusingWith && (
-                  <p className="text-xs text-amber-900 bg-amber-100/80 px-2.5 py-1.5 rounded-lg font-medium ml-5 mt-1">
+                  <p
+                    className="text-xs px-3 py-1.5 rounded-xl font-bold ml-5 mt-1"
+                    style={{ backgroundColor: '#FEF3C7', color: '#92400E' }}
+                  >
                     ⚠️ {currentQ.target.confusingWith}
                   </p>
                 )}
               </div>
               <button
                 onClick={() => generateQuestion(currentQ.target.id)}
-                className="shrink-0 px-4 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-extrabold shadow-sm cursor-pointer"
+                className="shrink-0 px-4 py-2.5 rounded-xl text-xs font-black shadow-xs cursor-pointer"
+                style={{ backgroundColor: '#2D4A3E', color: '#FEFCE8' }}
               >
-                확인·다음 (Space) →
+                외웠어요! 다음 (Space) →
               </button>
             </div>
           </div>
         )}
 
-        {/* 하단 단축키 안내 */}
-        <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-center gap-4 text-xs text-slate-400">
-          <span className="flex items-center gap-1">
+        {/* 칠판 하단 분필 받침대 안내 */}
+        <div
+          className="mt-6 pt-3 flex items-center justify-center gap-4 text-xs font-bold"
+          style={{ borderTop: '1.5px dashed rgba(255,255,255,0.2)', color: 'rgba(254, 252, 232, 0.7)' }}
+        >
+          <span className="flex items-center gap-1.5">
             <Keyboard className="w-3.5 h-3.5" />
-            PC 단축키: 숫자키 <strong>1 ~ 4</strong>로 즉시 선택, <strong>Space</strong>로 발음 듣기 / 다음 문제
+            키보드 숫자키 <strong>1 ~ 4</strong>로 초고속 선택 · <strong>Space</strong>로 발음 듣기 / 다음 문제
           </span>
         </div>
       </div>
