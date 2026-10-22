@@ -106,28 +106,130 @@ export const ROLEPLAY_SCENARIOS = [
   }
 ];
 
-async function callGeminiJson(apiKey, promptText) {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`;
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: promptText }] }],
-      generationConfig: {
-        temperature: 0.7,
-        responseMimeType: 'application/json'
-      }
-    })
-  });
+let cachedWorkingModel = null;
 
-  if (!res.ok) {
-    const errText = await res.text();
-    throw new Error(`API 오류 (${res.status}): 키가 정확한지 확인해 주세요. ${errText.slice(0, 80)}`);
+async function getCandidateModels(apiKey) {
+  const defaultFallbacks = [
+    'gemini-flash-latest',
+    'gemini-3-flash-preview',
+    'gemini-2.5-flash-lite',
+    'gemini-2.0-flash',
+    'gemini-1.5-flash-latest'
+  ];
+
+  try {
+    const listUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(apiKey.trim())}`;
+    const res = await fetch(listUrl);
+    if (!res.ok) return defaultFallbacks;
+    const data = await res.json();
+    const available = (data.models || [])
+      .filter(m =>
+        Array.isArray(m.supportedGenerationMethods) &&
+        m.supportedGenerationMethods.includes('generateContent') &&
+        m.name &&
+        m.name.includes('gemini') &&
+        !m.name.includes('tts') &&
+        !m.name.includes('image') &&
+        !m.name.includes('embedding') &&
+        !m.name.includes('vision') &&
+        !m.name.includes('robotics') &&
+        !m.name.includes('computer-use')
+      )
+      .map(m => m.name.replace(/^models\//, ''));
+
+    if (available.length === 0) return defaultFallbacks;
+
+    // 우선순위 정렬: flash 계열 최신 모델 우선
+    const preferredOrder = [
+      'gemini-flash-latest',
+      'gemini-3-flash-preview',
+      'gemini-3.1-flash-lite-preview',
+      'gemini-2.5-flash-lite',
+      'gemini-2.5-flash',
+      'gemini-2.0-flash',
+      'gemini-2.5-pro',
+      'gemini-pro-latest'
+    ];
+
+    available.sort((a, b) => {
+      const idxA = preferredOrder.indexOf(a);
+      const idxB = preferredOrder.indexOf(b);
+      if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+      if (idxA !== -1) return -1;
+      if (idxB !== -1) return 1;
+      const aFlash = a.includes('flash') ? 0 : 1;
+      const bFlash = b.includes('flash') ? 0 : 1;
+      return aFlash - bFlash;
+    });
+
+    return available;
+  } catch {
+    return defaultFallbacks;
+  }
+}
+
+function extractJsonObject(rawText) {
+  const cleaned = rawText
+    .replace(/^```json\s*/i, '')
+    .replace(/^```\s*/i, '')
+    .replace(/\s*```$/i, '')
+    .trim();
+  try {
+    return JSON.parse(cleaned);
+  } catch {
+    const match = cleaned.match(/\{[\s\S]*\}/);
+    if (match) {
+      return JSON.parse(match[0]);
+    }
+    throw new Error('JSON 응답 파싱 실패');
+  }
+}
+
+async function callGeminiJson(apiKey, promptText) {
+  const cleanKey = (apiKey || '').trim();
+  const candidates = await getCandidateModels(cleanKey);
+  const modelsToTry = cachedWorkingModel
+    ? [cachedWorkingModel, ...candidates.filter(m => m !== cachedWorkingModel)]
+    : candidates;
+
+  let lastErrorText = '';
+  let lastStatus = 0;
+
+  for (const modelName of modelsToTry) {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${encodeURIComponent(cleanKey)}`;
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: promptText }] }],
+        generationConfig: {
+          temperature: 0.7,
+          responseMimeType: 'application/json'
+        }
+      })
+    });
+
+    if (res.ok) {
+      cachedWorkingModel = modelName;
+      const data = await res.json();
+      const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
+      return extractJsonObject(rawText);
+    }
+
+    lastStatus = res.status;
+    lastErrorText = await res.text();
+
+    // 400 (API_KEY_INVALID) 또는 403 (권한 오류)이고 모델 문제가 아니면 즉시 중단
+    if (
+      (res.status === 400 || res.status === 403) &&
+      lastErrorText.includes('API_KEY_INVALID')
+    ) {
+      throw new Error('유효하지 않은 API 키입니다. 복사한 키 앞뒤 공백이나 오타를 확인해 주세요.');
+    }
+    // 404(모델 지원 종료/비활성)나 429/503 등은 다음 사용 가능한 모델로 자동 전환 시도!
   }
 
-  const data = await res.json();
-  const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
-  return JSON.parse(rawText);
+  throw new Error(`AI 모델 호출 실패 (${lastStatus}): ${lastErrorText.slice(0, 120)}`);
 }
 
 // 1. Gemini AI 자유 상황극 응답 생성
